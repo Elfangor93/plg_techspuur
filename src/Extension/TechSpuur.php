@@ -170,6 +170,8 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         \key_exists('dlid', $data->params) && $data->params['dlid']
       )
     {
+      $this->loadLanguageFile($extension->get('extension_id'));
+
       // Force a new license validation
       $data_params    = new Registry($data->params);
       $ressource_name = Text::_(\strtoupper($extension->get('name')) . '_SPFA_RESSOURCE_NAME'); // Name of the SPFA ressource
@@ -693,6 +695,8 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    */
   private function checkLicenseData(int $id, string $element, string $name, $data = null)
   {
+    $this->loadLanguageFile($id);
+
     // Get license data
     if(\is_null($data))
     {
@@ -703,8 +707,6 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $ressource_name = Text::_(\strtoupper($extension->get('name')) . '_SPFA_RESSOURCE_NAME'); // Name of the SPFA ressource
       $this->requestLicenseData($extension->get('extension_id'), $extension->get('params'), $extension->get('element'), $ressource_name);
     }
-
-    $this->loadLanguageFile($id);
     $lang_prefix = \strtoupper($name);
 
     /** state definition

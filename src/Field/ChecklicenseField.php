@@ -7,7 +7,7 @@
 **   @license    GNU General Public License version 3 or later            **
 ****************************************************************************/
 
-namespace Elfangor93\Plugin\System\Joomplupro\Field;
+namespace Elfangor93\Plugin\System\Techspuur\Field;
 
 defined('_JEXEC') or die();
 
