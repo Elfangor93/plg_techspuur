@@ -34,6 +34,15 @@ use Joomla\Registry\Registry;
 class TechSpuur extends CMSPlugin implements SubscriberInterface
 {
   /**
+	 * Refresh interval in seconds.
+   * How long to wait until we chek the license the next time.
+	 *
+	 * @var    integer
+	 * @since  1.0.0
+	 */
+  public $refresh_rate = 43200;
+
+  /**
 	 * Load plugin language files automatically
 	 *
 	 * @var    boolean
@@ -150,7 +159,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $data = $event->getData();
     }
 
-    // Run this plugin only for valid extension forms
+    // Run this plugin only for tech.spuur extension forms
     if(!$data || \is_array($data) || !\property_exists($data, 'name') || !\in_array($data->name, $this->getExtensions('names')))
     {
       return;
@@ -191,16 +200,21 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   /**
    * Reads out all activated Tech.Spuur extensions
    * 
-   * @return  array  List of extension ids
+   * @param   string  $mode   ids: return IDs | names: return extension names 
+   * 
+   * @return  array   List of extension ids or names
    * 
    * @since   1.0.0
    */
   private function getExtensions($mode = 'ids'): array
   {
-    if($this->id > 0 && empty($data))
+    $this->requestExtensionData('https://updates.spuur.ch/extensions.xml');
+
+    if($this->id > 0 && empty(self::$data))
     {
-      $ids = $this->getCustomData($this->id, false);
-      $ids = $ids->toArray();
+      $cdata = $this->getCustomData($this->id, false);
+      $cdata = $cdata->toArray();
+      $ids   = $cdata['extensions'];
 
       if(!empty($ids))
       {
@@ -384,18 +398,19 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   /**
    * Writes custom data of an extension to the db
    * 
-   * @param   int        $id    Extension id
-   * @param   Registry   $data  The new custom data
+   * @param   int        $id       Extension id
+   * @param   Registry   $data     The new custom data
+   * @param   bool       $license  True if it is license data
    * 
    * @return  void
    * 
    * @since   1.0.0
    */
-  private function setCustomData(int $id, Registry $data)
+  private function setCustomData(int $id, Registry $data, $license = true)
   {
-    $this->getExtension($id);
+    $this->getExtension($id, $license);
 
-    if($data->count() < 2 || !$data->exists('state'))
+    if($license && ($data->count() < 2 || !$data->exists('state')))
     {
       // There is no valid license data to be set
       Log::add('Error storing custom data: There is no valid license data to be set.', Log::ERROR, 'techspuur');
@@ -403,7 +418,10 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       return;
     }
 
-    self::$data[$id]->set('custom_data', $data);
+    if($license)
+    {
+      self::$data[$id]->set('custom_data', $data);
+    }
 
     $query = $this->db->getQuery(true);
 
@@ -531,9 +549,9 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $last_request = $this->getLastRequest($id, $element);
     $time_diff    = $now->getTimestamp() - $last_request->getTimestamp();
 
-    if(!$force_update && ($time_diff < 43200 || \file_exists(dirname(__FILE__) . '/offlineuse.txt')))
+    if(!$force_update && ($time_diff < $this->refresh_rate || \file_exists(dirname(__FILE__) . '/offlineuse.txt')))
     {
-      // Validation should happen only once every 12 hours or when its enforced
+      // Validation should happen only once every xx seconds or when its enforced
       return;
     }
 
@@ -663,18 +681,19 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    * 
    * @param   int      $id        Extension id
    * @param   string   $element   Extension element
+   * @param   bool     $license   True if it is license data
    * 
    * @return  Date
    * 
    * @since   1.1.0
    */
-  private function getLastRequest(int $id, string $element)
+  private function getLastRequest(int $id, string $element, bool $license = true)
   {
     $date = $this->getApplication()->getUserState($element.'.request.date', null);
 
     if(empty($date))
     {
-      $customData = $this->getCustomData($id);
+      $customData = $this->getCustomData($id, $license);
       $date = $customData->get('request_date', '1900-02-02 10:00:00');
     }
 
@@ -746,5 +765,162 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $this->getApplication()->setUserState($element.'.license.msg-type', 'success');
       $this->getApplication()->setUserState($element.'.license.msg-text', Text::_($lang_prefix.'_MSG_LICENSE_ACTIVE'));
     }
+  }
+
+  /**
+   * Sends to license data from extension params to endpoint for validation
+   * 
+   * @param   string    $url            URL to the extensions xml
+   * @param   bool      $force_update   Force the validation
+   * 
+   * @return  void
+   * 
+   * @since   1.0.0
+   */
+  private function requestExtensionData(string $url, bool $force_update = false)
+  {
+    // Only request once a day or if no custom data is available
+    $now          = Factory::getDate();
+    $last_request = $this->getLastRequest($this->id, 'techspuur', false);
+    $time_diff    = $now->getTimestamp() - $last_request->getTimestamp();
+
+    if(!$force_update && ($time_diff < $this->refresh_rate || \file_exists(dirname(__FILE__) . '/offlineuse.txt')))
+    {
+      // Validation should happen only once every xx seconds or when its enforced
+      return;
+    }
+
+    try
+    {
+      $xml = $this->fetchXML($url);
+    }
+    catch(\Exception $e)
+    {
+      Log::add('Error requesting XML extensions list: ' . $e->getMessage(), Log::ERROR, 'techspuur');
+      return;
+    }
+
+    // Collect all extensions of license=pro
+    $date  = Factory::getDate()->toSql();
+    $proExtensions = new Registry(['request_date' => $date]);
+    $i = 0;
+    foreach($xml->extension as $ext)
+    {
+      if((string) $ext['license'] === 'pro')
+      {
+        // Get ID of extension
+        $query = $this->db->getQuery(true);
+
+        $type    = (string) $ext['type'];
+        $element = (string) $ext['element'];
+        $folder  = (string) $ext['folder'];
+
+        $query->select($this->db->quoteName('extension_id'))
+              ->from('#__extensions')
+              ->where($this->db->quoteName('type') . ' = :type')
+              ->where($this->db->quoteName('element') . ' = :element')
+              ->where($this->db->quoteName('folder') . ' = :folder')
+              ->bind(':type', $type, ParameterType::STRING)
+              ->bind(':element', $element, ParameterType::STRING)
+              ->bind(':folder', $folder, ParameterType::STRING);
+        
+        try
+        {
+          $this->db->setQuery($query);
+          $ext_id = $this->db->loadResult();
+        }
+        catch(\Exception $e)
+        {
+          $ext_id = false;
+        }
+
+        if($ext_id)
+        {
+          $proExtensions->set('extensions.' . (string) $i, $ext_id);
+          $i++;
+        }
+      }
+    }
+
+    $this->setCustomData($this->id, $proExtensions, false);
+    $this->getApplication()->setUserState('techspuur.request.date', $date);
+  }
+
+  /**
+   * Method to load an XML from the web.
+   *
+   * @param   string  $uri  The URI of the feed to load. Idn uris must be passed already converted to punycode.
+   *
+   * @return  SimpleXMLElement
+   *
+   * @since   1.0.0
+   * @throws  \InvalidArgumentException
+   * @throws  \RuntimeException
+   */
+  private function fetchXML(string $uri): \SimpleXMLElement
+  {
+    // Create the XMLReader object.
+    $reader = new \XMLReader();
+
+    // Enable internal error handling for better debugging
+    \libxml_use_internal_errors(true);
+
+    // Open the URI within the stream reader.
+    if(!$reader->open($uri, null, LIBXML_NOWARNING | LIBXML_NOERROR))
+    {
+      // Handle errors and retry using an HTTP client fallback
+      $options = new Registry();
+      $options->set('userAgent', 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:41.0) Gecko/20100101 Firefox/41.0');
+
+      try
+      {
+        $response = HttpFactory::getHttp($options)->get($uri);
+      }
+      catch(\RuntimeException $e)
+      {
+        throw new \RuntimeException('Unable to open the feed.', $e->getCode(), $e);
+      }
+
+      if($response->code != 200)
+      {
+        throw new \RuntimeException('Unable to open the feed.');
+      }
+
+      // Set the value to the XMLReader parser
+      if(!$reader->XML($response->body, null, LIBXML_NOWARNING | LIBXML_NOERROR))
+      {
+        throw new \RuntimeException('Unable to parse the feed.');
+      }
+    }
+
+    try
+    {
+      // Skip to the first root element
+      $maxAttempts = 100;
+      $attempts    = 0;
+
+      while($reader->read())
+      {
+        if($reader->nodeType == \XMLReader::ELEMENT)
+        {
+          break;
+        }
+
+        if(++$attempts > $maxAttempts)
+        {
+          throw new \RuntimeException("Exceeded maximum attempts to find the root element.");
+        }
+      }
+
+      // Retrieve the xml string
+      $xmlString = $reader->readOuterXml();
+
+    }
+    catch(\Exception $e)
+    {
+      throw new \RuntimeException('Error reading feed.', $e->getCode(), $e);
+    }
+
+    return new \SimpleXMLElement($xmlString);
   }
 }
