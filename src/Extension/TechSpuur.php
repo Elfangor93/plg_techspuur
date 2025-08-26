@@ -103,8 +103,9 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   public static function getSubscribedEvents(): array
   {
     return [
-      'onAfterRoute'			   => ['onAfterRoute', Priority::HIGH],
-      'onContentPrepareForm' => ['onContentPrepareForm', Priority::HIGH],
+      'onAfterRoute'          => ['onAfterRoute', Priority::HIGH],
+      'onExtensionBeforeSave' => ['onExtensionBeforeSave', Priority::HIGH],
+      'onContentPrepareForm'  => ['onContentPrepareForm', Priority::HIGH],
     ];
   }
 
@@ -131,6 +132,46 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $this->checkLicenseData($id, $ext->get('element'), $ext->get('name'));
     }
   }
+
+  /**
+   * Event triggered before an item gets saved into the db.
+   * Check if we want to force a license request.
+   *
+   * @param   Event   $event   Event instance
+   * 
+   * @return  void
+   */
+  public function onExtensionBeforeSave(Event $event)
+  {
+    if(\version_compare(JVERSION, '5.0.0', '<'))
+    {
+      // Joomla 4
+      [$context, &$table, $isNew, $data] = $event->getArguments();
+    }
+    else
+    {
+      // Joomla 5 or newer
+      $table = $event->getItem();
+    }
+
+    if(!\in_array($table->name, $this->getExtensions('names')))
+    {
+      return;
+    }
+
+    $params = \json_decode($table->params);
+
+    if(\property_exists($params, 'force_update'))
+    {
+      $this->getApplication()->setUserState(\strtolower($table->name).'.license.force_update', \boolval($params->force_update));
+      $params->force_update = '0';
+    }
+
+    $table->params = \json_encode($params);
+
+    $event->setArgument('subject', $table);
+  }
+
 
   /**
    * Adds the license validation to plugin form
@@ -176,7 +217,8 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $this->getApplication()->setUserState($extension->get('element').'.license.state', null);
 
     if( \key_exists('username', $data->params) && $data->params['username'] &&
-        \key_exists('dlid', $data->params) && $data->params['dlid']
+        \key_exists('dlid', $data->params) && $data->params['dlid'] &&
+        $this->getApplication()->getUserState(\strtolower($extension->get('name')).'.license.force_update', false)
       )
     {
       $this->loadLanguageFile($extension->get('extension_id'));
@@ -185,6 +227,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $data_params    = new Registry($data->params);
       $ressource_name = Text::_(\strtoupper($extension->get('name')) . '_SPFA_RESSOURCE_NAME'); // Name of the SPFA ressource
       $this->requestLicenseData($extension->get('extension_id'), $data_params, $extension->get('element'), $ressource_name, true);
+      $this->getApplication()->setUserState(\strtolower($extension->get('name')).'.license.force_update', false);
     }
 
     $this->checkLicenseData($extension->get('extension_id'), $extension->get('element'), $extension->get('name'));
