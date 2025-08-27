@@ -60,9 +60,13 @@ class ChecklicenseField extends FormField
 		$js .=        'const changeEvent = new Event("change", { bubbles: true });';
 		$js .=        'selectElement.dispatchEvent(changeEvent);';
 		$js .=     '}';
-		$js .=     'const forceElement = document.getElementById("jform_params_force_update");';
-		$js .=     'if (forceElement) {';
-		$js .=        'forceElement.value = "1";';
+		$js .=     'const form = document.querySelector(\'main form[name="adminForm"]\');';
+		$js .=     'if (form) {';
+		$js .=        'const hiddenInput = document.createElement("input");';
+		$js .=        'hiddenInput.type = "hidden";';
+		$js .=        'hiddenInput.name = "jform[params][force_update]";';
+		$js .=        'hiddenInput.value = "1";';
+		$js .=        'form.appendChild(hiddenInput);';
 		$js .=     '}';
 		$js .=     'const toolbarApply = document.getElementById("toolbar-apply");';
 		$js .=     'if (toolbarApply) {';

@@ -159,17 +159,12 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       return;
     }
 
-    $params = \json_decode($table->params);
+    $params = $this->getApplication()->input->getArray(['jform' => ['params' => ['force_update' => 'int']]]);
 
-    if(\property_exists($params, 'force_update'))
+    if(\key_exists('force_update', $params['jform']['params']))
     {
-      $this->getApplication()->setUserState(\strtolower($table->name).'.license.force_update', \boolval($params->force_update));
-      $params->force_update = '0';
+      $this->getApplication()->setUserState(\strtolower($table->name).'.license.force_update', \boolval($params['jform']['params']['force_update']));
     }
-
-    $table->params = \json_encode($params);
-
-    $event->setArgument('subject', $table);
   }
 
 
@@ -831,6 +826,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $now          = Factory::getDate();
     $last_request = $this->getLastRequest($this->id, 'techspuur', false);
     $time_diff    = $now->getTimestamp() - $last_request->getTimestamp();
+    $force_update = true;
 
     if(!$force_update && ($time_diff < $this->refresh_rate || \file_exists(dirname(__FILE__) . '/offlineuse.txt')))
     {
