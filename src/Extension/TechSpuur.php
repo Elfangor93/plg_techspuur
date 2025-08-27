@@ -257,7 +257,12 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     {
       $cdata = $this->getCustomData($this->id, false);
       $cdata = $cdata->toArray();
-      $ids   = $cdata['extensions'];
+
+      $ids = [];
+      if(key_exists('extensions', $cdata))
+      {
+        $ids = $cdata['extensions'];
+      }      
 
       if(!empty($ids))
       {
