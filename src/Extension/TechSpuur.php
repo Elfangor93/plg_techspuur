@@ -154,6 +154,37 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $table = $event->getItem();
     }
 
+    if($table->name == 'plg_system_techspuur')
+    {
+      // We are saving this plugin form
+      $array = ['create_log' => 'int', 'check_server' => 'int', 'refresh_list' => 'int'];
+      $params = $this->getApplication()->input->getArray(['jform' => ['params' => $array]]);
+      $params = $params['jform']['params'];
+
+      if($params['check_server'])
+      {
+        // Check the server availability
+        $create_log = \boolval($params['create_log']);
+        $this->checkLicenseServer($create_log);
+      }
+      elseif($params['refresh_list'])
+      {
+        // Refresh the list of extensions
+        try
+        {
+          $this->requestExtensionData('https://updates.spuur.ch/extensions.xml', true);
+        }
+        catch(\Exception $e)
+        {
+          $this->getApplication()->enqueueMessage('Error fetching XML: ' . $e->getMessage(), 'error');
+        }
+
+        $this->getApplication()->enqueueMessage('Extension list successfully refreshed.', 'success');
+      }
+
+      return;
+    }
+
     if(!\in_array($table->name, $this->getExtensions('names')))
     {
       return;
@@ -720,6 +751,169 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   }
 
   /**
+   * Sends a request to the license server for debugging reasons
+   * 
+   * @param   bool   $createLog   True, if a log file should be created
+   * 
+   * @return  void
+   * 
+   * @since   1.0.0
+   */
+  private function checkLicenseServer($createLog)
+  {
+    // URL to send request to
+    $url = 'https://tech.spuur.ch/index.php?option=com_sesamepayforaccess&view=licensevalidate&format=json';
+
+    // Log file
+    $tmp_folder  = $this->getApplication()->get('tmp_path');
+    $logFilePath = $tmp_folder . '/techspuur/requestServer_log_' . time() . '.txt';
+
+    // Form data to send
+    $formData = [
+      'username' => 'Example',
+      'dlid' => 'xxx',
+      'resource' => 'Test'
+    ];
+
+    // Generate signature
+    $secret    = 'tech.$puur_valid_@Elfangor93';
+    $payload   = \http_build_query($formData); // same encoding as body
+    $signature = \hash_hmac('sha256', $payload, $secret);
+
+    // Set headers
+    $headers = [
+      'X-Signature' => $signature,
+      'Content-Type' => 'application/x-www-form-urlencoded',
+      'Referer' => Uri::root()
+    ];
+
+    // Format the headers for cURL
+    $curl_headers = [];
+    foreach ($headers as $key => $value) {
+      $curl_headers[] = "$key: $value";
+    }
+
+    // Create a raw cURL request for debugging
+    try
+    {
+      $ch = \curl_init($url);
+      $options = [
+          CURLOPT_RETURNTRANSFER => true,
+          CURLOPT_POST           => true,
+          CURLOPT_POSTFIELDS     => $payload,
+          CURLOPT_HTTPHEADER     => $curl_headers,
+          CURLOPT_HEADER         => true,
+          CURLOPT_SSL_VERIFYHOST => 0,
+          CURLOPT_SSL_VERIFYPEER => 0
+      ];
+
+      $verboseFile = null;
+      if($createLog)
+      {
+        $verboseFile = \fopen($logFilePath, 'w');
+        $options[CURLOPT_VERBOSE] = true;
+        $options[CURLOPT_STDERR]  = $verboseFile;
+      }
+
+      \curl_setopt_array($ch, $options);
+
+      $ch_res  = \curl_exec($ch);
+      $ch_info = \curl_getinfo($ch);
+
+      if($createLog)
+      {
+        \fclose($verboseFile);
+      }
+
+      \curl_close($ch);
+
+      if($createLog)
+      {
+        \file_put_contents($logFilePath, "\n\n=== RESPONSE BODY START ===\n" . $ch_res, FILE_APPEND);
+      }
+    }
+    catch(\Exception $e)
+    {
+      $this->getApplication()->enqueueMessage('Error during request:' . $e->getMessage(), 'error');
+    }
+
+    // Print message
+    $response = $this->parseResponse($ch_res);
+    if($ch_info['http_code'] == 200 || ($ch_info['http_code'] == 403 && $ch_info['primary_ip'] == '194.150.248.215'  && strtolower($response['server']) == 'litespeed'))
+    {
+      $this->getApplication()->enqueueMessage('Request successful!<br><br>Status code: ' . $ch_info['http_code'] . '<br>Body: '.$response['body'], 'success');
+    }
+    else
+    {
+      $this->getApplication()->enqueueMessage('Request failed!<br><br>Status code ' . $ch_info['http_code'], 'error');
+    }
+  }
+
+  /**
+   * Parses the response of a cURL response body string
+   * 
+   * @param   string   $response   The cURL response body string
+   * 
+   * @return  array    The parsed response
+   * 
+   * @since   1.0.0
+   */
+  protected function parseResponse(string $response): array
+  {
+    $headers = [];
+
+    // Normalize newlines
+    $response = \str_replace("\r", "\n", $response);
+
+    // Split headers by line
+    $lines = \explode("\n", $response);
+
+    foreach($lines as $line)
+    {
+        $line = trim($line);
+        if($line === '') continue;
+
+        // First line (status line), e.g. HTTP/2 403
+        if(\stripos($line, 'HTTP/') === 0)
+        {
+          $headers['status'] = $line;
+          continue;
+        }
+
+        // Key: Value headers
+        if(\strpos($line, ':') !== false)
+        {
+          list($key, $value) = \explode(':', $line, 2);
+          $key   = \strtolower(\trim($key));
+          $value = \trim($value);
+
+          // If key already exists, append value into single string
+          if(isset($headers[$key]))
+          {
+            $headers[$key] .= ', ' . $value;
+          }
+          else
+          {
+            $headers[$key] = $value;
+          }
+        }
+        else
+        {
+          if(isset($headers['body']))
+          {
+            $headers['body'] .= '; ' . $line;
+          }
+          else
+          {
+            $headers['body'] = $line;
+          }          
+        }
+    }
+
+    return $headers;
+}
+
+  /**
    * Gets the last license validate request date
    * 
    * @param   int      $id        Extension id
@@ -826,7 +1020,6 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $now          = Factory::getDate();
     $last_request = $this->getLastRequest($this->id, 'techspuur', false);
     $time_diff    = $now->getTimestamp() - $last_request->getTimestamp();
-    $force_update = true;
 
     if(!$force_update && ($time_diff < $this->refresh_rate || \file_exists(dirname(__FILE__) . '/offlineuse.txt')))
     {

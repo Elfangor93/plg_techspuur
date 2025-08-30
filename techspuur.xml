@@ -23,6 +23,49 @@
       <language tag="de-DE">language/de-DE/plg_system_techspuur.sys.ini</language>
     </languages>
 
+    <config>
+      <fields name="params">
+        <fieldset name="basic" addfieldprefix="Elfangor93\Plugin\System\Techspuur\Field">
+          <field name="create_log"
+                 type="radio"
+                 default="0"
+                 class="btn-group"
+                 layout="joomla.form.field.radio.switcher"
+                 label="Create Log File"
+                 description="Yes, to create a log file containing debugging info of the request to the Tech.Spuur server" >
+              <option value="0">JNO</option>
+              <option value="1">JYES</option>
+          </field>
+          <field name="checkserver"
+					       type="buttonscript"
+                 label="Check Server"
+                 description="Checks the availability of the Tech.Spuur server. Server needs to be available and reachable to activate PRO licenses."
+                 text="Request Server"
+                 script="check_server"
+                 icon="out-2"
+          />
+          <field name="downloadlog"
+					       type="downloadlog"
+                 label="Download Log File"
+                 text="Download Log"
+                 icon="download"
+          />
+          <field name="myspacer"
+                 type="spacer"
+                 hr="true"
+          />
+          <field name="refreshlist"
+					       type="buttonscript"
+                 label="Refresh Extension List"
+                 description="Refreshes the list of available Tech.Spuur exteniosn based on the online XML list."
+                 text="Refresh List"
+                 script="refresh_list"
+                 icon="loop"
+          />
+        </fieldset>
+      </fields>
+    </config>
+
     <changelogurl>https://updates.spuur.ch/plg_techspuur_changelog.xml</changelogurl>
 	
     <updateservers>
