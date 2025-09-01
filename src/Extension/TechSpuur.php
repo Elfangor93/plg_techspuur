@@ -66,12 +66,30 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   protected $id = 0;
 
   /**
+   * Storage for extensions XML
+   *
+   * @var    \SimpleXMLElement
+   * @since  1.0.0
+   */
+  protected static $extensions = null;
+
+  /**
    * Storage for extension data
+   * [<extension_id> => Registry, ...]
    *
    * @var    array
    * @since  1.0.0
    */
   protected static $data = [];
+
+  /**
+   * Storage for extension data
+   * ['com_joomgallery' => [id1, id2, ...], ...]
+   *
+   * @var    array
+   * @since  1.0.0
+   */
+  protected static $dependencies = [];
 
   /**
    * Constructor
@@ -128,8 +146,54 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $ids = $this->getExtensions();
     foreach($ids as $id)
     {
+      // Get extension data
       $ext = $this->getExtension($id);
+
+      // Check the license of the extension
       $this->checkLicenseData($id, $ext->get('element'), $ext->get('name'));
+
+      // Compose list of dependent components
+      $tmp = new Registry;
+      $dependence = $ext->get('custom_data', $tmp)->get('dependence', '');
+      if($dependence)
+      {
+        if(\strpos($dependence, 'com') !== false && !\key_exists($dependence, self::$dependencies))
+        {
+          // Add new dependency to list
+          self::$dependencies[$dependence] = [];
+        }
+
+        \array_push(self::$dependencies[$dependence], $id);        
+      }
+    }
+
+    // Show license messages in dependent component backend
+    $option = $this->getApplication()->input->get('option');
+    if( $this->getApplication()->isClient('administrator') &&
+        $option && \key_exists($option, self::$dependencies)
+      )
+    {
+      foreach(self::$dependencies[$option] as $ext_id)
+      {
+        // Show message if we have an invalid license
+        $extension = self::$data[$ext_id];
+        if($this->getApplication()->getUserState($extension->get('element').'.license.state', -1) !== 1)
+        {
+          $msg_type = $this->getApplication()->getUserState($extension->get('element').'.license.msg-type', 'message');
+          $msg_text = $this->getApplication()->getUserState($extension->get('element').'.license.msg-text', '');
+          $this->getApplication()->enqueueMessage($msg_text, $msg_type);
+        }
+      }
+
+      // Check if we have a compatible component version
+      $version_com   = (string) $this->loadXMLFile($option)->version;
+      $compatibility = (string) $this->loadXMLFile($extension->get('extension_id'))->compatibility;
+      if($version_com && $compatibility && !\preg_match('/^' . $compatibility . '/', $version_com))
+      {
+        // Incompatible component version
+        $lang_prefix = \strtoupper($extension->get('name'));
+        $this->getApplication()->enqueueMessage(sprintf(Text::_($lang_prefix.'_MSG_VERSION_HINT'), $version_com), 'error');
+      }
     }
   }
 
@@ -561,6 +625,58 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   }
 
   /**
+   * Load the XML manifest file of a specific extension
+   * 
+   * @param   int|string     $id      Extension id
+   * 
+   * @return  SimpleXMLElement
+   * 
+   * @since   1.0.0
+   */
+  private function loadXMLFile($id): \SimpleXMLElement
+  {
+    $extension = $this->getExtension($id, false);
+
+    $base = JPATH_SITE;
+    if((int) $extension->get('client_id', 0))
+    {
+      $base = JPATH_ADMINISTRATOR;
+    }
+
+    switch($extension->get('type'))
+    {
+      case 'plugin':
+        $path   = JPATH_SITE . '/plugins/' . $extension->get('folder') . '/' . $extension->get('element');
+        $prefix = 'plg_';
+        break;
+
+      case 'module':
+        $path   = $base . '/modules/' . $extension->get('name');
+        $prefix = 'mod_';
+        break;
+
+      case 'component':
+        $path   = JPATH_ADMINISTRATOR . '/components/' . $extension->get('name');
+        $prefix = 'com_';
+        break;
+      
+      default:
+        $path   = $base;
+        $prefix = '';
+        break;
+    }
+
+    $file = $path . '/' . \str_replace($prefix, '', \strtolower($extension->get('element'))) . '.xml';
+    if(\file_exists($file))
+    {
+      $xml = \simplexml_load_file($file);
+      return $xml;
+    }
+
+    return new \SimpleXMLElement('');
+  }
+
+  /**
    * Disable an extension
    * 
    * @param   int      $id    Extension id
@@ -668,6 +784,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $license_data->set('state', -1, 'int');
       $license_data->set('domain', '', 'string');
       $license_data->set('num_licenses', 0, 'int');
+      $license_data->set('dependence', '', 'string');
       $license_data->set('expiration_date', '');
       $license_data->set('request_date', Factory::getDate()->toSql());
 
@@ -703,6 +820,23 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         $license_data->set('num_licenses', $filter->clean($license_data_array['num_licenses']), 'int');
         $license_data->set('expiration_date', $expiration_date->toSql());
         $license_data->set('request_date', Factory::getDate()->toSql());
+
+        // Get list of extensions 
+        $this->requestExtensionData('https://updates.spuur.ch/extensions.xml', true);
+        foreach(self::$extensions->extension as $ext)
+        {
+          if((string) $ext['name'] === $name)
+          {
+            $dependence = '';
+            if($ext['dependence'])
+            {
+              $dependence = (string) $ext['dependence'];
+            }
+
+            $license_data->set('dependence', $dependence, 'string');
+            break;
+          }
+        }
 
         // Log data if state < 1
         if($license_data->get('state') < 1)
@@ -1008,7 +1142,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    * Sends to license data from extension params to endpoint for validation
    * 
    * @param   string    $url            URL to the extensions xml
-   * @param   bool      $force_update   Force the validation
+   * @param   bool      $force_update   Force to update the list
    * 
    * @return  void
    * 
@@ -1027,21 +1161,24 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       return;
     }
 
-    try
+    if(is_null(self::$extensions) || empty(self::$extensions))
     {
-      $xml = $this->fetchXML($url);
-    }
-    catch(\Exception $e)
-    {
-      Log::add('Error requesting XML extensions list: ' . $e->getMessage(), Log::ERROR, 'techspuur');
-      return;
+      try
+      {
+        self::$extensions = $this->fetchXML($url);
+      }
+      catch(\Exception $e)
+      {
+        Log::add('Error requesting XML extensions list: ' . $e->getMessage(), Log::ERROR, 'techspuur');
+        return;
+      }
     }
 
     // Collect all extensions of license=pro
     $date  = Factory::getDate()->toSql();
     $proExtensions = new Registry(['request_date' => $date]);
     $i = 0;
-    foreach($xml->extension as $ext)
+    foreach(self::$extensions->extension as $ext)
     {
       if((string) $ext['license'] === 'pro')
       {
