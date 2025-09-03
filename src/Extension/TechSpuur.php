@@ -240,10 +240,10 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         }
         catch(\Exception $e)
         {
-          $this->getApplication()->enqueueMessage('Error fetching XML: ' . $e->getMessage(), 'error');
+          $this->getApplication()->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML', $e->getMessage()), 'error');
         }
 
-        $this->getApplication()->enqueueMessage('Extension list successfully refreshed.', 'success');
+        $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_EXTENSION_LIST'), 'success');
       }
 
       return;
@@ -371,7 +371,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         }
         catch(\Exception $e)
         {
-          Log::add('Error fetching tech.spuur extensions: ' . $e->getMessage(), Log::ERROR, 'techspuur');
+          Log::add(Text::_('PLG_SYSTEM_TECHSPUUR_ERROR_EXTENSIONS', $e->getMessage()), Log::ERROR, 'techspuur');
         }
 
         foreach($extensions as $key => $extension)
@@ -435,7 +435,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       }
       catch(\Exception $e)
       {
-        Log::add('Error fetching extension: ' . $e->getMessage(), Log::ERROR, 'techspuur');
+        Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_EXTENSION', $e->getMessage()), Log::ERROR, 'techspuur');
       }
     }
 
@@ -461,7 +461,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       }
       catch(\Exception $e)
       {
-        Log::add('Error fetching extension: ' . $e->getMessage(), Log::ERROR, 'techspuur');
+        Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_EXTENSION', $e->getMessage()), Log::ERROR, 'techspuur');
       }
 
       if($store && $extension)
@@ -551,7 +551,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     if($license && ($data->count() < 2 || !$data->exists('state')))
     {
       // There is no valid license data to be set
-      Log::add('Error storing custom data: There is no valid license data to be set.', Log::ERROR, 'techspuur');
+      Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_CUSTOM_DATA', Text::_('PLG_SYSTEM_TECHSPUUR_ERROR_LICENSE_DATA')), Log::ERROR, 'techspuur');
 
       return;
     }
@@ -576,7 +576,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
     catch(\Exception $e)
     {
-      Log::add('Error storing custom data: ' . $e->getMessage(), Log::ERROR, 'techspuur');
+      Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_CUSTOM_DATA', $e->getMessage()), Log::ERROR, 'techspuur');
     }
   }
 
@@ -709,7 +709,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
     catch(\Exception $e)
     {
-      Log::add('Error disabling extension: ' . $e->getMessage(), Log::ERROR, 'techspuur');
+      Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_DISABLE', $e->getMessage()), Log::ERROR, 'techspuur');
     }
   }
 
@@ -794,7 +794,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         $response_body = \json_decode($response->body, true);
         if($response_body === null)
         {
-          Log::add('Error decoding response JSON: ' . json_last_error_msg(), Log::ERROR, 'techspuur');
+          Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_JSON_DECODE', json_last_error_msg()), Log::ERROR, 'techspuur');
           Log::add($response->body, Log::ERROR, 'techspuur');
 
           return;
@@ -804,7 +804,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         $license_data_array = \json_decode($response_body['data'], true);
         if($license_data_array === null)
         {
-          Log::add('Error decoding response body data JSON: ' . json_last_error_msg(), Log::ERROR, 'techspuur');
+          Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_JSON_DECODE', json_last_error_msg()), Log::ERROR, 'techspuur');
           Log::add($response_body['data'], Log::ERROR, 'techspuur');
 
           return;
@@ -849,9 +849,9 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
           $logdata_received = '[license state: '.$license_state[$license_data->get('state', '-1')].', domain: '.$license_data->get('domain', '-').', expiration date: '.$license_data->get('expiration_date').']';
 
           // Logging
-          Log::add('No valid license information received', Log::WARNING, 'techspuur');
-          Log::add('Data sent to server: ' . $logdata_sent, Log::WARNING, 'techspuur');
-          Log::add('Data received from server: ' . $logdata_received, Log::WARNING, 'techspuur');
+          Log::add(Text::_('PLG_SYSTEM_TECHSPUUR_ERROR_LICENSE_MISSING_INFO'), Log::WARNING, 'techspuur');
+          Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_LICENSE_SENT_DATA', $logdata_sent), Log::WARNING, 'techspuur');
+          Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_LICENSE_RECEIVED_DATA', $logdata_received), Log::WARNING, 'techspuur');
         }
 
         $this->getApplication()->setUserState($element.'.request.date', $license_data->get('request_date'));
@@ -859,7 +859,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       elseif($response->code < 500)
       {
         // Access denied
-        Log::add('Failed requesting license data: Response code:' . $response->code . ', Response body:' . $response->body, Log::WARNING, 'techspuur');
+        Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', 'Response code:' . $response->code . ', Response body:' . $response->body), Log::WARNING, 'techspuur');
         $this->getApplication()->setUserState($element.'.request.date', $license_data->get('request_date'));
       }
       else
@@ -872,13 +872,13 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
           $response_body = $response->body;
         }
 
-        Log::add('Error requesting license data: Response code:' . $response->code . ', Response body:' . $response_body, Log::ERROR, 'techspuur');
+        Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', 'Response code:' . $response->code . ', Response body:' . $response_body), Log::ERROR, 'techspuur');
       }
     }
     catch(\Exception $e)
     {
       // Application Error
-      Log::add('Error requesting license data: ' . $e->getMessage(), Log::ERROR, 'techspuur');
+      Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', $e->getMessage()), Log::ERROR, 'techspuur');
     }
 
     $this->setCustomData($id, $license_data);
@@ -968,18 +968,21 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
     catch(\Exception $e)
     {
-      $this->getApplication()->enqueueMessage('Error during request:' . $e->getMessage(), 'error');
+      $this->getApplication()->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST', $e->getMessage()), 'error');
     }
 
     // Print message
     $response = $this->parseResponse($ch_res);
     if($ch_info['http_code'] == 200 || ($ch_info['http_code'] == 403 && $ch_info['primary_ip'] == '194.150.248.215'  && strtolower($response['server']) == 'litespeed'))
     {
-      $this->getApplication()->enqueueMessage('Request successful!<br><br>Status code: ' . $ch_info['http_code'] . '<br>Body: '.$response['body'], 'success');
+      // Response coming from correct ip and correct server
+      $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_REQUEST') . '<br><br>Status code: ' . $ch_info['http_code'] . '<br>Body: '.$response['body'], 'success');
     }
     else
     {
-      $this->getApplication()->enqueueMessage('Request failed!<br><br>Status code ' . $ch_info['http_code'], 'error');
+      // Something is blocking the request
+      $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_FAILED_REQUEST') . '<br><br>Status code ' . $ch_info['http_code'], 'error');
+      $this->getApplication()->enqueueMessage('<br>' . Text::_('PLG_SYSTEM_TECHSPUUR_ERROR_CHECK_SERVER'), 'error');
     }
   }
 
@@ -1045,7 +1048,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
 
     return $headers;
-}
+  }
 
   /**
    * Gets the last license validate request date
@@ -1169,7 +1172,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       }
       catch(\Exception $e)
       {
-        Log::add('Error requesting XML extensions list: ' . $e->getMessage(), Log::ERROR, 'techspuur');
+        Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML_EXTENSIONS', $e->getMessage()), Log::ERROR, 'techspuur');
         return;
       }
     }

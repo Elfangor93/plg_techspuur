@@ -119,8 +119,8 @@ class ChecklicenseField extends FormField
     $wa->addInlineStyle($css);
 
     $icon_class = 'icon-unfeatured';
-    $state_lbl  = Text::_('PLG_CONTENT_JOOMPLUPRO_LICENSE_STATE');
-    $state_txt  = Text::_('PLG_CONTENT_JOOMPLUPRO_UNKNOWN');
+    $state_lbl  = Text::_('PLG_SYSTEM_TECHSPUUR_LICENSE_STATE');
+    $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_UNKNOWN');
 
     if($data)
     {
@@ -130,22 +130,22 @@ class ChecklicenseField extends FormField
           // License active
           $icon_class = 'icon-publish';
           $exp_date   = HTMLHelper::_('date', $data->expiration_date, Text::_('DATE_FORMAT_LC4'));
-          $state_txt  = Text::_('PLG_CONTENT_JOOMPLUPRO_ACTIVE');
-          $state_txt  .= '<br><small>(' . Text::sprintf('PLG_CONTENT_JOOMPLUPRO_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_CONTENT_JOOMPLUPRO_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
+          $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_ACTIVE');
+          $state_txt  .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
           break;
 
         case 2:
           // License expired
           $icon_class = 'icon-unpublish';
           $exp_date   = HTMLHelper::_('date', $data->expiration_date, Text::_('DATE_FORMAT_LC4'));
-          $state_txt  = Text::_('PLG_CONTENT_JOOMPLUPRO_EXPIRED');
-          $state_txt  .= '<br><small>(' . Text::sprintf('PLG_CONTENT_JOOMPLUPRO_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_CONTENT_JOOMPLUPRO_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
+          $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_EXPIRED');
+          $state_txt  .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
           break;
 
         case 0:
           // License disabled / User blocked
           $icon_class = 'icon-unpublish';
-          $state_txt  = Text::_('PLG_CONTENT_JOOMPLUPRO_DISABLED');
+          $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_DISABLED');
           break;
         
         default:

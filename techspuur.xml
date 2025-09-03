@@ -31,23 +31,23 @@
                  default="0"
                  class="btn-group"
                  layout="joomla.form.field.radio.switcher"
-                 label="Create Log File"
-                 description="Yes, to create a log file containing debugging info of the request to the Tech.Spuur server" >
+                 label="PLG_SYSTEM_TECHSPUUR_FIELD_CREATE_LOG"
+                 description="PLG_SYSTEM_TECHSPUUR_FIELD_CREATE_LOG_DESC" >
               <option value="0">JNO</option>
               <option value="1">JYES</option>
           </field>
           <field name="checkserver"
 					       type="buttonscript"
-                 label="Check Server"
-                 description="Checks the availability of the Tech.Spuur server. Server needs to be available and reachable to activate PRO licenses."
-                 text="Request Server"
+                 label="PLG_SYSTEM_TECHSPUUR_FIELD_CHECK_SERVER"
+                 description="PLG_SYSTEM_TECHSPUUR_FIELD_CHECK_SERVER_DESC"
+                 text="PLG_SYSTEM_TECHSPUUR_FIELD_CHECK_SERVER_TXT"
                  script="check_server"
                  icon="out-2"
           />
           <field name="downloadlog"
 					       type="downloadlog"
-                 label="Download Log File"
-                 text="Download Log"
+                 label="PLG_SYSTEM_TECHSPUUR_FIELD_DOWNLOAD_LOG"
+                 text="PLG_SYSTEM_TECHSPUUR_FIELD_DOWNLOAD_LOG_TXT"
                  icon="download"
           />
           <field name="myspacer"
@@ -56,9 +56,9 @@
           />
           <field name="refreshlist"
 					       type="buttonscript"
-                 label="Refresh Extension List"
-                 description="Refreshes the list of available Tech.Spuur exteniosn based on the online XML list."
-                 text="Refresh List"
+                 label="PLG_SYSTEM_TECHSPUUR_FIELD_REFRESH_LIST"
+                 description="PLG_SYSTEM_TECHSPUUR_FIELD_REFRESH_LIST_DESC"
+                 text="PLG_SYSTEM_TECHSPUUR_FIELD_REFRESH_LIST_TXT"
                  script="refresh_list"
                  icon="loop"
           />

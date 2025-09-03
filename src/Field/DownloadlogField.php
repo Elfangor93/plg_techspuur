@@ -72,7 +72,7 @@ class DownloadlogField extends FormField
 
 		// Create output
 		$html  = '<div>';
-		$html .= '<p><strong>Log-File path:</strong><br>'.$log_folder.'</p>';
+		$html .= '<p><strong>'.Text::_('PLG_SYSTEM_TECHSPUUR_LOGFILE_PATH').':</strong><br>'.$log_folder.'</p>';
 		if($log_file)
 		{
 			// There is a log file to be downloaded
@@ -81,7 +81,7 @@ class DownloadlogField extends FormField
 		else
 		{
 			// No current logfile found
-			$html .= '<p>No current log file available. Create a request first.</p>';
+			$html .= '<p>'.Text::_('PLG_SYSTEM_TECHSPUUR_NO_LOGFILE_FOUND').'</p>';
 		}
 		$html .= '</div>';
 
