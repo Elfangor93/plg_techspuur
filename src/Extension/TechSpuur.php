@@ -236,7 +236,14 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         // Refresh the list of extensions
         try
         {
-          $this->requestExtensionData('https://updates.spuur.ch/extensions.xml', true);
+          $proExtensions = $this->requestExtensionData('https://updates.spuur.ch/extensions.xml', true);
+
+          if($proExtensions)
+          {
+            // Update custom data
+            $table->custom_data = $proExtensions->toString('json');
+            $event->setArgument('subject', $table);
+          }
         }
         catch(\Exception $e)
         {
@@ -341,11 +348,14 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    */
   private function getExtensions($mode = 'ids'): array
   {
-    $this->requestExtensionData('https://updates.spuur.ch/extensions.xml');
+    $cdata = $this->requestExtensionData('https://updates.spuur.ch/extensions.xml');
 
     if($this->id > 0 && empty(self::$data))
     {
-      $cdata = $this->getCustomData($this->id, false);
+      if(!$cdata)
+      {
+        $cdata = $this->getCustomData($this->id, false);
+      }      
       $cdata = $cdata->toArray();
 
       $ids = [];
@@ -821,7 +831,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         $license_data->set('expiration_date', $expiration_date->toSql());
         $license_data->set('request_date', Factory::getDate()->toSql());
 
-        // Get list of extensions 
+        // Get list of extensions
         $this->requestExtensionData('https://updates.spuur.ch/extensions.xml', true);
         foreach(self::$extensions->extension as $ext)
         {
@@ -1147,7 +1157,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    * @param   string    $url            URL to the extensions xml
    * @param   bool      $force_update   Force to update the list
    * 
-   * @return  void
+   * @return  bool|Registry
    * 
    * @since   1.0.0
    */
@@ -1161,7 +1171,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     if(!$force_update && ($time_diff < $this->refresh_rate || \file_exists(dirname(__FILE__) . '/offlineuse.txt')))
     {
       // Validation should happen only once every xx seconds or when its enforced
-      return;
+      return false;
     }
 
     if(is_null(self::$extensions) || empty(self::$extensions))
@@ -1173,7 +1183,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       catch(\Exception $e)
       {
         Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML_EXTENSIONS', $e->getMessage()), Log::ERROR, 'techspuur');
-        return;
+        return false;
       }
     }
 
@@ -1221,6 +1231,8 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
 
     $this->setCustomData($this->id, $proExtensions, false);
     $this->getApplication()->setUserState('techspuur.request.date', $date);
+
+    return $proExtensions;
   }
 
   /**
