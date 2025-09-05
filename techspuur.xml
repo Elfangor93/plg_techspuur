@@ -26,6 +26,11 @@
     <config>
       <fields name="params">
         <fieldset name="basic" addfieldprefix="Elfangor93\Plugin\System\Techspuur\Field">
+          <field name="note1"
+                 type="note"
+                 label="PLG_SYSTEM_TECHSPUUR_FIELD_NOTE_CHECK_SERVER"
+                 description="PLG_SYSTEM_TECHSPUUR_FIELD_NOTE_CHECK_SERVER_DESC"
+          />
           <field name="create_log"
                  type="radio"
                  default="0"
@@ -50,9 +55,13 @@
                  text="PLG_SYSTEM_TECHSPUUR_FIELD_DOWNLOAD_LOG_TXT"
                  icon="download"
           />
-          <field name="myspacer"
+          <field name="spacer1"
                  type="spacer"
                  hr="true"
+          />
+          <field name="note2"
+                 type="note"
+                 label="PLG_SYSTEM_TECHSPUUR_FIELD_NOTE_EXTENSIONS"
           />
           <field name="refreshlist"
 					       type="buttonscript"
@@ -61,6 +70,13 @@
                  text="PLG_SYSTEM_TECHSPUUR_FIELD_REFRESH_LIST_TXT"
                  script="refresh_list"
                  icon="loop"
+          />
+          <field name="spacer2"
+                 type="spacer"
+                 hr="true"
+          />
+          <field name="extensions"
+					       type="extensions"
           />
         </fieldset>
       </fields>

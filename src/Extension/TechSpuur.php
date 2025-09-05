@@ -1246,7 +1246,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    * @throws  \InvalidArgumentException
    * @throws  \RuntimeException
    */
-  private function fetchXML(string $uri): \SimpleXMLElement
+  public function fetchXML(string $uri): \SimpleXMLElement
   {
     // Create the XMLReader object.
     $reader = new \XMLReader();
