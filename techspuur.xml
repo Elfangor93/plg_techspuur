@@ -62,6 +62,7 @@
           <field name="note2"
                  type="note"
                  label="PLG_SYSTEM_TECHSPUUR_FIELD_NOTE_EXTENSIONS"
+                 description="PLG_SYSTEM_TECHSPUUR_FIELD_NOTE_EXTENSIONS_DESC"
           />
           <field name="refreshlist"
 					       type="buttonscript"

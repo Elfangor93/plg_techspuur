@@ -10,13 +10,9 @@
 defined('_JEXEC') or die;
 
 use Joomla\CMS\Language\Text;
-
-if(!$displayData)
-{
-  return;
-}
 ?>
 
+<h4><?php echo Text::_('PLG_SYSTEM_TECHSPUUR_EXTENSIONS_TITLE'); ?></h4>
 <table id="jg-extensions" class="table table-striped">
   <thead>
     <tr>
