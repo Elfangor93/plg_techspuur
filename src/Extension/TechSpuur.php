@@ -105,7 +105,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     parent::__construct($dispatcher, $config);
 
     $this->id = $config['id'];
-    $lang = $this->getApplication()->getLanguage();
+    $lang = Factory::getApplication()->getLanguage();
     $lang->load('plg_system_techspuur', JPATH_SITE . '/plugins/system/techspuur');
 
     Log::addLogger(array('text_file' => 'techspuur.php'), Log::ALL, array('techspuur'));
