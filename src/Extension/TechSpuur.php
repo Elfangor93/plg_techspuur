@@ -992,7 +992,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     if($ch_info['http_code'] == 200 || ($ch_info['http_code'] == 403 && $ch_info['primary_ip'] == '194.150.248.215'  && strtolower($response['server']) == 'litespeed'))
     {
       // Response coming from correct ip and correct server
-      $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_REQUEST') . '<br><br>Status code: ' . $ch_info['http_code'] . '<br>Body: '.$response['body'], 'success');
+      $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_REQUEST').' <a data-bs-toggle="collapse" href="#collapseBody" role="button" aria-expanded="false" aria-controls="collapseBody"> '.Text::_('PLG_SYSTEM_TECHSPUUR_SHOW_MORE').'</a><div class="collapse" id="collapseBody"><br><br>Status code: '.$ch_info['http_code'].'<br>Body: '.$response['body'].'</div>', 'success');
     }
     else
     {
