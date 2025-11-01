@@ -258,7 +258,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       return;
     }
 
-    if(!\in_array($table->name, $this->getExtensions('names')))
+    if(!\in_array($table->name, $this->getExtensions('names', false)))
     {
       return;
     }
@@ -348,7 +348,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    * 
    * @since   1.0.0
    */
-  private function getExtensions($mode = 'ids'): array
+  private function getExtensions($mode = 'ids', $onlyEnabled = true): array
   {
     $cdata = $this->requestExtensionData('https://updates.spuur.ch/extensions.xml');
 
@@ -372,9 +372,13 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
 
         $query->select($this->db->quoteName(['extension_id', 'name', 'type', 'element', 'folder', 'params', 'custom_data']))
               ->from('#__extensions')
-              ->where($this->db->quoteName('enabled') . ' = ' . '1')
               ->where($this->db->quoteName('extension_id') . ' IN (' . \implode(',', \array_map('intval', $ids)) . ')');
-          
+
+        if($onlyEnabled)
+        {
+          $query->where($this->db->quoteName('enabled') . ' = ' . '1');
+        }
+
         $this->db->setQuery($query);
 
         try
