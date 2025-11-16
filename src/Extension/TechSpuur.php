@@ -59,6 +59,14 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   protected $db = null;
 
   /**
+   * Context
+   *
+   * @var   string
+   * @since  1.0.3
+   */
+  protected static $context = '';
+
+  /**
    * Extension id
    *
    * @var   int
@@ -144,15 +152,25 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $lang = Factory::getApplication()->getLanguage();
     $lang->load('plg_system_techspuur', JPATH_SITE . '/plugins/system/techspuur');
 
-    // Check licenses if needed
+    // Update list of extensions
     $ids = $this->getExtensions();
+
+    // Check licenses if needed
     foreach($ids as $id)
     {
       // Get extension data
       $ext = $this->getExtension($id);
 
-      // Check the license of the extension
-      $this->checkLicenseData($id, $ext->get('element'), $ext->get('name'));
+      try
+      {
+        // Check the license of the extension
+        $this->checkLicenseData($id, $ext->get('element'), $ext->get('name'));
+      }
+      catch(\Throwable $th)
+      {
+        // Checking license not possible, probably network problems
+        $this->licenceCheckError($th);
+      }
 
       // Compose list of dependent components
       $tmp = new Registry;
@@ -220,6 +238,9 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $table = $event->getItem();
     }
 
+    // Set context
+    $this->guessContext($table->name);
+
     if($table->name == 'plg_system_techspuur')
     {
       // We are saving this plugin form
@@ -245,14 +266,14 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
             // Update custom data
             $table->custom_data = $proExtensions->toString('json');
             $event->setArgument('subject', $table);
+
+            $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_EXTENSION_LIST'), 'success');
           }
         }
         catch(\Exception $e)
         {
           $this->getApplication()->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML', $e->getMessage()), 'error');
         }
-
-        $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_EXTENSION_LIST'), 'success');
       }
 
       return;
@@ -305,6 +326,9 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       return;
     }
 
+    // Set context
+    $this->guessContext($data->name);
+
     // Get the extension object
     $extension = $this->getExtension($data->name);
 
@@ -329,7 +353,16 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $this->getApplication()->setUserState(\strtolower($extension->get('name')).'.license.force_update', false);
     }
 
-    $this->checkLicenseData($extension->get('extension_id'), $extension->get('element'), $extension->get('name'));
+    try
+    {
+      // Check the license of the extension
+      $this->checkLicenseData($extension->get('extension_id'), $extension->get('element'), $extension->get('name'));
+    }
+    catch(\Exception $e)
+    {
+      // Checking license not possible, probably network problems
+      $this->licenceCheckError($e);
+    }
 
     // Display the license message
     $msg_type = $this->getApplication()->getUserState($extension->get('element').'.license.msg-type', 'message');
@@ -337,6 +370,87 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $this->getApplication()->enqueueMessage($msg_text, $msg_type);
 
     return;
+  }
+
+  /**
+   * Try to guess context
+   * 
+   * @param   string   $form   Name of the form
+   * 
+   * @return  string   Context
+   * 
+   * @since   1.0.3
+   */
+  private function guessContext($form = ''): string
+  {
+    if(self::$context != '')
+    {
+      return self::$context;
+    }
+
+    // Read query variables
+    $cont_arr = [];
+    if($option = $this->getApplication()->input->get('option', false))
+    {
+      array_push($cont_arr, $option);
+    }
+    if($view = $this->getApplication()->input->get('view', false))
+    {
+      array_push($cont_arr, $view);
+    }
+    if($task = $this->getApplication()->input->get('task', false))
+    {
+      array_push($cont_arr, $task);
+    }
+    if($form)
+    {
+      array_push($cont_arr, $form);
+    }
+
+    // Use application name instead
+    if(empty($cont_arr))
+    {
+      array_push($cont_arr, $this->getApplication()->getName() . '.default');
+    }
+
+    self::$context = implode('.', $cont_arr);
+
+    return self::$context;
+  }
+
+  /**
+   * Handle an error during license check
+   * 
+   * @param   string   $error   The error
+   * 
+   * @since   1.0.3
+   */
+  private function licenceCheckError($error): void
+  {
+    $app     = $this->getApplication();
+    $context = $this->guessContext();
+    $ids     = $this->getExtensions();
+
+    // In case license data can not be validated, we deactive the PRO extensions
+    foreach($ids as $id)
+    {
+      $this->disable($id);
+    }
+
+    // Handle the error depending on application
+    if(($app->isClient('site') || $app->isClient('administrator')))
+    {
+      if($app->getIdentity()->authorise('core.admin'))
+      {
+        // If we have admin permissions, we will show a warning with more information
+        $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', Text::_('PLG_SYSTEM_TECHSPUUR_ERROR_NO_INTERNET')), 'error');
+      }
+      elseif($app->getIdentity()->authorise('core.manage'))
+      {
+        // If we have admin permissions, we will show a warning
+        $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', Text::_('PLG_SYSTEM_TECHSPUUR_ERROR_NO_INTERNET_INFO')), 'warning');
+      }
+    }
   }
 
   /**
@@ -417,8 +531,6 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
 
     return \array_keys(self::$data);
   }
-
-
 
   /**
    * Reads out one specific extension
@@ -754,8 +866,16 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $now          = Factory::getDate();
     $last_request = $this->getLastRequest($id, $element);
     $time_diff    = $now->getTimestamp() - $last_request->getTimestamp();
+    $context      = $this->guessContext();
+    $offlineuse   = false;
 
-    if(!$force_update && ($time_diff < $this->refresh_rate || \file_exists(dirname(__FILE__) . '/offlineuse.txt')))
+    // Check for offline statement
+    if(\file_exists(dirname(__FILE__) . '/offlineuse.txt'))
+    {
+      $offlineuse = true;
+    }
+
+    if(!$force_update && ($time_diff < $this->refresh_rate || $offlineuse))
     {
       // Validation should happen only once every xx seconds or when its enforced
       return;
@@ -895,6 +1015,8 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     {
       // Application Error
       Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', $e->getMessage()), Log::ERROR, 'techspuur');
+
+      return;
     }
 
     $this->setCustomData($id, $license_data);
@@ -993,6 +1115,11 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     {
       // Response coming from correct ip and correct server
       $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_REQUEST').' <a data-bs-toggle="collapse" href="#collapseBody" role="button" aria-expanded="false" aria-controls="collapseBody"> '.Text::_('PLG_SYSTEM_TECHSPUUR_SHOW_MORE').'</a><div class="collapse" id="collapseBody"><br><br>Status code: '.$ch_info['http_code'].'<br>Body: '.$response['body'].'</div>', 'success');
+    }
+    elseif($ch_info['http_code'] == 0)
+    {
+      $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_FAILED_REQUEST') . '<br><br>Status code ' . $ch_info['http_code'], 'error');
+      $this->getApplication()->enqueueMessage(Text::_('Network unavailable.'), 'error');
     }
     else
     {
@@ -1173,23 +1300,39 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $now          = Factory::getDate();
     $last_request = $this->getLastRequest($this->id, 'techspuur', false);
     $time_diff    = $now->getTimestamp() - $last_request->getTimestamp();
+    $context      = $this->guessContext();
 
-    if(!$force_update && ($time_diff < $this->refresh_rate || \file_exists(dirname(__FILE__) . '/offlineuse.txt')))
+    if(!$force_update && ($time_diff < $this->refresh_rate))
     {
       // Validation should happen only once every xx seconds or when its enforced
       return false;
     }
 
-    if(is_null(self::$extensions) || empty(self::$extensions))
+    if(\is_null(self::$extensions) || empty(self::$extensions))
     {
+      $local_xml = \dirname(__FILE__) . DIRECTORY_SEPARATOR . \basename($url);
+
       try
       {
         self::$extensions = $this->fetchXML($url);
+        self::$extensions->asXML($local_xml);
+
       }
       catch(\Exception $e)
       {
         Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML_EXTENSIONS', $e->getMessage()), Log::ERROR, 'techspuur');
-        return false;
+
+        if(!$force_update && \is_file($local_xml))
+        {
+          // Load local xml instead
+          self::$extensions = \simplexml_load_file($local_xml);
+        }
+        else
+        {
+          $this->getApplication()->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML_EXTENSIONS', 'Network unavailable.'), 'error');
+
+          return false;
+        }
       }
     }
 

@@ -53,9 +53,27 @@ class ExtensionsField extends FormField
 	{
 		$dispatcher = Factory::getApplication()->getDispatcher();
 		$plugin     = new TechSpuur($dispatcher, ['id' => 0]);
+		$url        = 'https://updates.spuur.ch/extensions.xml';
 
 		$layoutPath = JPATH_PLUGINS . '/system/techspuur/layouts';
-		$extensions = $plugin->fetchXML('https://updates.spuur.ch/extensions.xml');
+		$local_xml  = \dirname(\dirname(__FILE__)) . '/Extension/' . \basename($url);
+
+		try
+		{
+			$extensions = $plugin->fetchXML($url);
+		}
+		catch(\Exception $e)
+		{
+			if(\is_file($local_xml))
+			{
+				// Load local xml instead
+				$extensions = \simplexml_load_file($local_xml);
+			}
+			else
+			{
+				return false;
+			}
+		}
 
 		return LayoutHelper::render('extensions', $extensions, $layoutPath);
 	}
