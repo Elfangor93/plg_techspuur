@@ -842,6 +842,45 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   }
 
   /**
+   * Read the offlineuse.txt file into an array
+   * 
+   * @param   string  $file  Filepath
+   * 
+   * @return  array   Array containing the extension names
+   * 
+   * @since   1.0.2
+   */
+  private function parseOfflineuseTxt(string $file): array
+  {
+    $names = [];
+
+    // Read file into array of lines
+    $lines = \file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+
+    foreach($lines as $line)
+    {
+      // Split each line by comma, but allow whole line if no commas
+      $parts = \array_map('trim', \explode(',', $line));
+
+      foreach($parts as $name)
+      {
+        if ($name === '') continue;
+
+        // Remove "PRO" suffix (case-insensitive)
+        // Only if it's at the end, with optional space before it
+        $clean = \preg_replace('/\s* pro$/i', 'pro', $name);
+
+        // Convert to lowercase
+        $clean = \strtolower($clean);
+
+        $names[] = $clean;
+      }
+    }
+
+    return $names;
+  }
+
+  /**
    * Sends to license data from extension params to endpoint for validation
    * 
    * @param   int       $id             Extension id
@@ -870,9 +909,15 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $offlineuse   = false;
 
     // Check for offline statement
-    if(\file_exists(dirname(__FILE__) . '/offlineuse.txt'))
+    $file = \dirname(__FILE__) . '/offlineuse.txt';
+    if(\file_exists($file))
     {
-      $offlineuse = true;
+      $arr_offlineuse = $this->parseOfflineuseTxt($file);
+
+      if(\in_array(\strtolower($element), $arr_offlineuse))
+      {
+        $offlineuse = true;
+      }
     }
 
     if(!$force_update && ($time_diff < $this->refresh_rate || $offlineuse))
