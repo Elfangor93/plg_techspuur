@@ -12,6 +12,7 @@ namespace Elfangor93\Plugin\System\Techspuur\Field;
 defined('_JEXEC') or die();
 
 use \Joomla\CMS\Factory;
+use \Joomla\CMS\Language\Text;
 use \Joomla\CMS\Form\FormField;
 use \Joomla\CMS\Layout\LayoutHelper;
 use \Elfangor93\Plugin\System\Techspuur\Extension\TechSpuur;
@@ -64,6 +65,8 @@ class ExtensionsField extends FormField
 		}
 		catch(\Exception $e)
 		{
+			Factory::getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_ERROR_XML_EXTENSIONS_NICE'));
+
 			if(\is_file($local_xml))
 			{
 				// Load local xml instead
