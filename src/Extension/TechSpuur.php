@@ -112,14 +112,17 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   {
     parent::__construct($dispatcher, $config);
 
-    $params    = \json_decode($config['params']);
-    $frequency = \intval($params->frequency);
-
     $this->id = $config['id'];
 
-    if($frequency && $frequency > 10800 && $frequency < 10510000)
+    if(\key_exists('params', $config))
     {
-      $this->refresh_rate = $params->frequency;
+      $params    = \json_decode($config['params']);
+      $frequency = \intval($params->frequency);
+
+      if($frequency && $frequency > 10800 && $frequency < 10510000)
+      {
+        $this->refresh_rate = $params->frequency;
+      }
     }
 
     Log::addLogger(['text_file' => 'techspuur.php'], Log::ALL, ['techspuur']);
