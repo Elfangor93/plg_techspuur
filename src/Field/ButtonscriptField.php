@@ -85,8 +85,53 @@ class ButtonscriptField extends FormField
 			$text = $this->element['text'];
 		}
 
-		$html = '<button class="btn btn-primary" onclick="performScript(\''.$this->element['script'].'\');">' . $icon . Text::_($text) . '</button>';
+		$html = '';
+		if($this->element['input'])
+		{
+			$html .= '<div class="input-group">';
+			$html .= $this->getRenderer('joomla.form.field.text')->render($this->collectLayoutData());
+		}
+
+		$html .= '<button class="btn btn-primary" onclick="performScript(\''.$this->element['script'].'\');">' . $icon . Text::_($text) . '</button>';
+
+		if($this->element['input'])
+		{
+			$html .= '</div>';
+		}
 
 		return $html;
 	}
+
+  /**
+   * Method to get the data to be passed to the layout for rendering.
+   *
+   * @return  array
+   *
+   * @since 1.2
+   */
+  protected function getLayoutData()
+  {
+    $data = parent::getLayoutData();
+
+    // Initialize some field attributes.
+    $maxLength    = !empty($this->maxLength) ? ' maxlength="' . $this->maxLength . '"' : '';
+    $inputmode    = !empty($this->inputmode) ? ' inputmode="' . $this->inputmode . '"' : '';
+    $dirname      = !empty($this->dirname) ? ' dirname="' . $this->dirname . '"' : '';
+
+    // Get the field options for the datalist.
+    $options  = [];
+
+    $extraData = [
+        'maxLength'   => $maxLength,
+        'pattern'     => null,
+        'inputmode'   => $inputmode,
+        'dirname'     => $dirname,
+        'addonBefore' => null,
+        'addonAfter'  => null,
+        'options'     => $options,
+        'charcounter' => null,
+    ];
+
+    return array_merge($data, $extraData);
+  }
 }

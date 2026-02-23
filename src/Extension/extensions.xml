@@ -4,7 +4,7 @@
 					   element="joomplupro"
 						 description="The content plugin for the JoomGallery component"
 						 type="plugin"
-						 version="1.2.0"
+						 version="1.2.3"
 						 client="site"
 						 folder="content"
 						 license="pro"

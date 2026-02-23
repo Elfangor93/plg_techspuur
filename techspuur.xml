@@ -81,6 +81,29 @@
 					       type="extensions"
           />
         </fieldset>
+        <fieldset name="advanced">
+          <field name="note3"
+                 type="note"
+                 label="PLG_SYSTEM_TECHSPUUR_FIELD_NOTE_ADV"
+                 description="PLG_SYSTEM_TECHSPUUR_FIELD_NOTE_ADV_DESC"
+          />
+          <field name="frequency"
+                 type="number"
+                 default="43200"
+                 label="PLG_SYSTEM_TECHSPUUR_FIELD_LICENSE_FREQUENCY"
+                 description="PLG_SYSTEM_TECHSPUUR_FIELD_LICENSE_FREQUENCY_DESC"
+                 min="10800"
+                 max="10510000"
+          />
+          <field name="offline"
+                 type="buttonscript"
+                 label="PLG_SYSTEM_TECHSPUUR_FIELD_OFFLINE"
+                 description="PLG_SYSTEM_TECHSPUUR_FIELD_OFFLINE_DESC"
+                 text="PLG_SYSTEM_TECHSPUUR_FIELD_OFFLINE_TXT"
+                 script="register_offline"
+                 input="true"
+          />
+        </fieldset>
       </fields>
     </config>
 

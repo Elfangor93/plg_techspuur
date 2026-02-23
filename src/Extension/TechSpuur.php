@@ -112,9 +112,17 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   {
     parent::__construct($dispatcher, $config);
 
+    $params    = \json_decode($config['params']);
+    $frequency = \intval($params->frequency);
+
     $this->id = $config['id'];
 
-    Log::addLogger(array('text_file' => 'techspuur.php'), Log::ALL, array('techspuur'));
+    if($frequency && $frequency > 10800 && $frequency < 10510000)
+    {
+      $this->refresh_rate = $params->frequency;
+    }
+
+    Log::addLogger(['text_file' => 'techspuur.php'], Log::ALL, ['techspuur']);
   }
 
   /**
@@ -236,6 +244,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     {
       // Joomla 5 or newer
       $table = $event->getItem();
+      $data  = $event->getData();
     }
 
     // Set context
@@ -244,7 +253,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     if($table->name == 'plg_system_techspuur')
     {
       // We are saving this plugin form
-      $array = ['create_log' => 'int', 'check_server' => 'int', 'refresh_list' => 'int'];
+      $array = ['create_log' => 'int', 'check_server' => 'int', 'refresh_list' => 'int', 'register_offline' => 'int'];
       $params = $this->getApplication()->input->getArray(['jform' => ['params' => $array]]);
       $params = $params['jform']['params'];
 
@@ -274,6 +283,44 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         {
           $this->getApplication()->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML', $e->getMessage()), 'error');
         }
+      }
+      elseif($params['register_offline'])
+      {
+        // Register an extension as offline
+
+        // Parse the offlineuse file
+        $file = \dirname(__FILE__) . '/offlineuse.txt';
+        if(\file_exists($file))
+        {
+          $arr_offlineuse = $this->parseOfflineuseTxt($file);
+        }
+        else
+        {
+          $arr_offlineuse = [];
+        }
+
+        // Remove "PRO" suffix (case-insensitive)
+        // Only if it's at the end, with optional space before it
+        // Convert to lowercase
+        $clean = \preg_replace('/\s* pro$/i', 'pro', $data['params']['offline']);
+        $clean = \strtolower($clean);
+
+        // Add extension if not yet in array
+        if(!\in_array($clean, $arr_offlineuse))
+        {
+          \array_push($arr_offlineuse, $clean);
+        }
+
+        // Store it to $file. Overwrite existing content if any.
+        \file_put_contents($file, \implode(',', $arr_offlineuse));
+      }
+
+      // Remove offline string if available
+      $tmp_params = \json_decode($table->params);
+      if(!empty($tmp_params->offline))
+      {
+        $tmp_params->offline = '';
+        $table->params = \json_encode($tmp_params);
       }
 
       return;
