@@ -168,13 +168,17 @@ class ChecklicenseField extends FormField
     $db = Factory::getContainer()->get(DatabaseInterface::class);
     $query = $db->getQuery(true);
 
+    // Get extension info (with compatibility with JoomPlu < v1.2.3)
+    $type    = isset($this->element['extension_type']) ? (string) $this->element['extension_type'] : 'plugin';
+    $element = isset($this->element['extension_element']) ? (string) $this->element['extension_element'] : 'joomplupro';
+
     // Create query
     $query
       ->select($db->quoteName('custom_data'))
       ->from($db->quoteName('#__extensions'))
       ->where(
-        [ $db->quoteName('type') . ' = ' . $db->quote('plugin'),
-          $db->quoteName('element') . ' = ' . $db->quote('joomplupro'),
+        [ $db->quoteName('type') . ' = ' . $db->quote($type),
+          $db->quoteName('element') . ' = ' . $db->quote($element),
         ]
       );
 
