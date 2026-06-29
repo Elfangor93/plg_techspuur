@@ -844,14 +844,24 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         break;
     }
 
-    $file = $path . '/' . \str_replace($prefix, '', \strtolower($extension->get('element'))) . '.xml';
-    if(\file_exists($file))
+    // XML without prefix
+    $file_1 = $path . '/' . \str_replace($prefix, '', \strtolower($extension->get('element'))) . '.xml';
+    $file_2 = $path . '/' . \strtolower($extension->get('element')) . '.xml';
+    if(\file_exists($file_1))
     {
-      $xml = \simplexml_load_file($file);
+      $xml = \simplexml_load_file($file_1);
       return $xml;
     }
-
-    return new \SimpleXMLElement('');
+    elseif(\file_exists($file_2))
+    {
+      // XML with prefix
+      $xml = \simplexml_load_file($file_2);
+      return $xml;
+    }
+    else
+    {
+      throw new \Exception('XML of extension ' . $extension->get('name') . ' could not be loaded.', 1);
+    }
   }
 
   /**
