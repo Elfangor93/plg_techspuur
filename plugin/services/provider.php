@@ -20,21 +20,21 @@ use Elfangor93\Plugin\System\Techspuur\Extension\TechSpuur;
 
 return new class implements ServiceProviderInterface
 {
-    public function register(Container $container)
-    {
-        $container->set(
-            PluginInterface::class,
-            function (Container $container)
-            {
-                $config  = (array)PluginHelper::getPlugin('system', 'techspuur');
-                $subject = $container->get(DispatcherInterface::class);
+  public function register(Container $container)
+  {
+    $container->set(
+      PluginInterface::class,
+      function (Container $container)
+      {
+        $config  = (array)PluginHelper::getPlugin('system', 'techspuur');
+        $subject = $container->get(DispatcherInterface::class);
 
-                /** @var \Joomla\CMS\Plugin\CMSPlugin $plugin */
-                $plugin = new TechSpuur($subject, $config);
-                $plugin->setApplication(Factory::getApplication());
+        /** @var \Joomla\CMS\Plugin\CMSPlugin $plugin */
+        $plugin = new TechSpuur($subject, $config);
+        $plugin->setApplication(Factory::getApplication());
 
-                return $plugin;
-            }
-        );
-    }
+        return $plugin;
+      }
+    );
+  }
 };

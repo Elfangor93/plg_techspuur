@@ -34,21 +34,21 @@ use Joomla\Registry\Registry;
 class TechSpuur extends CMSPlugin implements SubscriberInterface
 {
   /**
-	 * Refresh interval in seconds.
+   * Refresh interval in seconds.
    * How long to wait until we chek the license the next time.
-	 *
-	 * @var    integer
-	 * @since  1.0.0
-	 */
+   *
+   * @var    integer
+   * @since  1.0.0
+   */
   public $refresh_rate = 43200;
 
   /**
-	 * Load plugin language files automatically
-	 *
-	 * @var    boolean
-	 * @since  1.0.0
-	 */
-	protected $autoloadLanguage = true;
+   * Load plugin language files automatically
+   *
+   * @var    boolean
+   * @since  1.0.0
+   */
+  protected $autoloadLanguage = true;
 
   /**
    * Global database object
@@ -153,9 +153,9 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   {
     // This feature only applies in the site and administrator applications
     if( !$this->getApplication()->isClient('site') &&
-			  !$this->getApplication()->isClient('administrator')
+        !$this->getApplication()->isClient('administrator')
       )
-		{
+    {
       return;
     }
 
