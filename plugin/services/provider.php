@@ -1,22 +1,23 @@
 <?php
 /**
-****************************************************************************
-**   @package    plg_system_techspuur                                     **
-**   @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
-**   @copyright  2025 Manuel Haeusler                                     **
-**   @license    GNU General Public License version 3 or later            **
-****************************************************************************/
+ * **************************************************************************
+ *    @package    plg_system_techspuur                                     **
+ *    @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
+ *    @copyright  2026 Manuel Haeusler                                     **
+ *    @license    GNU General Public License version 3 or later            **
+ * **************************************************************************
+ */
 
 // No direct access
-defined('_JEXEC') or die;
+\defined('_JEXEC') || die;
 
+use Elfangor93\Plugin\System\Techspuur\Extension\TechSpuur;
 use Joomla\CMS\Extension\PluginInterface;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Plugin\PluginHelper;
 use Joomla\DI\Container;
 use Joomla\DI\ServiceProviderInterface;
 use Joomla\Event\DispatcherInterface;
-use Elfangor93\Plugin\System\Techspuur\Extension\TechSpuur;
 
 return new class implements ServiceProviderInterface
 {
@@ -24,8 +25,7 @@ return new class implements ServiceProviderInterface
   {
     $container->set(
       PluginInterface::class,
-      function (Container $container)
-      {
+      function (Container $container) {
         $config  = (array)PluginHelper::getPlugin('system', 'techspuur');
         $subject = $container->get(DispatcherInterface::class);
 

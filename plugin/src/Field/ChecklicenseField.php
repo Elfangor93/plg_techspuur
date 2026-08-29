@@ -1,21 +1,22 @@
 <?php
 /**
-****************************************************************************
-**   @package    plg_system_joomplupro                                    **
-**   @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
-**   @copyright  2025 Manuel Haeusler                                     **
-**   @license    GNU General Public License version 3 or later            **
-****************************************************************************/
+ * **************************************************************************
+ *    @package    plg_system_techspuur                                     **
+ *    @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
+ *    @copyright  2026 Manuel Haeusler                                     **
+ *    @license    GNU General Public License version 3 or later            **
+ * **************************************************************************
+ */
 
 namespace Elfangor93\Plugin\System\Techspuur\Field;
 
-defined('_JEXEC') or die();
+\defined('_JEXEC') || die();
 
-use \Joomla\CMS\Factory;
-use \Joomla\CMS\Form\FormField;
-use \Joomla\CMS\Language\Text;
-use \Joomla\Database\DatabaseInterface;
-use \Joomla\CMS\HTML\HTMLHelper;
+use Joomla\CMS\Factory;
+use Joomla\CMS\Form\FormField;
+use Joomla\CMS\HTML\HTMLHelper;
+use Joomla\CMS\Language\Text;
+use Joomla\Database\DatabaseInterface;
 
 class ChecklicenseField extends FormField
 {
@@ -97,7 +98,8 @@ class ChecklicenseField extends FormField
   {
     try {
       $data = $this->getLicenseData();
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $data = null;
     }
 
@@ -131,29 +133,29 @@ class ChecklicenseField extends FormField
           $icon_class = 'icon-publish';
           $exp_date   = HTMLHelper::_('date', $data->expiration_date, Text::_('DATE_FORMAT_LC4'));
           $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_ACTIVE');
-          $state_txt  .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
-          break;
+          $state_txt .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
+            break;
 
         case 2:
           // License expired
           $icon_class = 'icon-unpublish';
           $exp_date   = HTMLHelper::_('date', $data->expiration_date, Text::_('DATE_FORMAT_LC4'));
           $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_EXPIRED');
-          $state_txt  .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
-          break;
+          $state_txt .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
+            break;
 
         case 0:
           // License disabled / User blocked
           $icon_class = 'icon-unpublish';
           $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_DISABLED');
-          break;
-        
+            break;
+
         default:
-          break;
-      }      
+            break;
+      }
     }
 
-    return '<div class="license-icon"><span class="icon '.$icon_class.'" aria-hidden="true"></span><span class="label"><strong>'.$state_lbl.':</strong> '.$state_txt.'</span></div>';
+    return '<div class="license-icon"><span class="icon ' . $icon_class . '" aria-hidden="true"></span><span class="label"><strong>' . $state_lbl . ':</strong> ' . $state_txt . '</span></div>';
   }
 
   /**
@@ -165,7 +167,7 @@ class ChecklicenseField extends FormField
    */
   protected function getLicenseData()
   {
-    $db = Factory::getContainer()->get(DatabaseInterface::class);
+    $db    = Factory::getContainer()->get(DatabaseInterface::class);
     $query = $db->getQuery(true);
 
     // Get extension info (with compatibility with JoomPlu < v1.2.3)
@@ -178,7 +180,8 @@ class ChecklicenseField extends FormField
       ->select($db->quoteName('custom_data'))
       ->from($db->quoteName('#__extensions'))
       ->where(
-        [ $db->quoteName('type') . ' = ' . $db->quote($type),
+        [
+          $db->quoteName('type') . ' = ' . $db->quote($type),
           $db->quoteName('element') . ' = ' . $db->quote($element),
         ]
       );
@@ -192,6 +195,6 @@ class ChecklicenseField extends FormField
     $db->setQuery($query);
     $result = $db->loadResult();
 
-    return \json_decode($result);
+    return json_decode($result);
   }
 }

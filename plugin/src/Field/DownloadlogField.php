@@ -1,21 +1,22 @@
 <?php
 /**
-****************************************************************************
-**   @package    plg_system_joomplupro                                    **
-**   @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
-**   @copyright  2025 Manuel Haeusler                                     **
-**   @license    GNU General Public License version 3 or later            **
-****************************************************************************/
+ * **************************************************************************
+ *    @package    plg_system_techspuur                                     **
+ *    @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
+ *    @copyright  2026 Manuel Haeusler                                     **
+ *    @license    GNU General Public License version 3 or later            **
+ * **************************************************************************
+ */
 
 namespace Elfangor93\Plugin\System\Techspuur\Field;
 
-defined('_JEXEC') or die();
+\defined('_JEXEC') || die();
 
-use \Joomla\CMS\Factory;
-use \Joomla\CMS\Form\FormField;
-use \Joomla\CMS\Language\Text;
-use \Joomla\CMS\Uri\Uri;
-use \Joomla\Filesystem\Path;
+use Joomla\CMS\Factory;
+use Joomla\CMS\Form\FormField;
+use Joomla\CMS\Language\Text;
+use Joomla\CMS\Uri\Uri;
+use Joomla\Filesystem\Path;
 
 class DownloadlogField extends FormField
 {
@@ -54,17 +55,19 @@ class DownloadlogField extends FormField
   {
     // Define inline Script
     $log_folder     = Factory::getApplication()->get('tmp_path') . '/techspuur/';
-    $log_folder_uri = Uri::root() . \str_replace(JPATH_ROOT.'/', '', $log_folder);
+    $log_folder_uri = Uri::root() . str_replace(JPATH_ROOT . '/', '', $log_folder);
     $log_folder     = Path::clean($log_folder);
     $log_file       = $this->getLatestLogFile($log_folder);
 
     $icon = '';
+
     if($this->element['icon'])
     {
       $icon = '<span class="icon icon-' . $this->element['icon'] . '"></span> ';
     }
 
     $text = '';
+
     if($this->element['text'])
     {
       $text = $this->element['text'];
@@ -72,16 +75,17 @@ class DownloadlogField extends FormField
 
     // Create output
     $html  = '<div>';
-    $html .= '<p><strong>'.Text::_('PLG_SYSTEM_TECHSPUUR_LOGFILE_PATH').':</strong><br>'.$log_folder.'</p>';
+    $html .= '<p><strong>' . Text::_('PLG_SYSTEM_TECHSPUUR_LOGFILE_PATH') . ':</strong><br>' . $log_folder . '</p>';
+
     if($log_file)
     {
       // There is a log file to be downloaded
-      $html .= '<a class="btn btn-secondary" href="'.$log_folder_uri.\basename($log_file).'">' . $icon . Text::_($text) . '</a>';
+      $html .= '<a class="btn btn-secondary" href="' . $log_folder_uri . basename($log_file) . '">' . $icon . Text::_($text) . '</a>';
     }
     else
     {
       // No current logfile found
-      $html .= '<p>'.Text::_('PLG_SYSTEM_TECHSPUUR_NO_LOGFILE_FOUND').'</p>';
+      $html .= '<p>' . Text::_('PLG_SYSTEM_TECHSPUUR_NO_LOGFILE_FOUND') . '</p>';
     }
     $html .= '</div>';
 
@@ -95,7 +99,7 @@ class DownloadlogField extends FormField
 
   /**
    * Method to get the latest available log file
-   * 
+   *
    * @param   string    $folderPath     Folder path of the log files
    * @param   int       $maxAge         Max age of the file to be returned (older files are not returned)
    * @param   string    $prefix         Part of the filename before the unix time string
@@ -107,32 +111,33 @@ class DownloadlogField extends FormField
    */
   protected function getLatestLogFile($folderPath, $maxAge = 600, $prefix = 'requestServer_log_', $suffix = '.txt')
   {
-    $latestFile = false;
+    $latestFile      = false;
     $latestTimestamp = 0;
-    $now = time();
+    $now             = time();
 
     // Ensure folder exists
-    if(!\is_dir($folderPath))
+    if(!is_dir($folderPath))
     {
-      if(!\is_dir(\dirname($folderPath)))
+      if(!is_dir(\dirname($folderPath)))
       {
         // Parent doesn't exist
         return false;
       }
 
-        // Create the folder
-        if(!\mkdir($folderPath, 0777, false))
-        {
-          return false;
-        }
+      // Create the folder
+      if(!mkdir($folderPath, 0777, false))
+      {
+        return false;
+      }
     }
 
     // Read files in folder
-    $files = \scandir($folderPath);
+    $files = scandir($folderPath);
+
     foreach($files as $file)
     {
       // Match files with correct pattern
-      if(\preg_match("/^" . \preg_quote($prefix, '/') . "(\d+)" . \preg_quote($suffix, '/') . "$/", $file, $matches))
+      if(preg_match('/^' . preg_quote($prefix, '/') . "(\d+)" . preg_quote($suffix, '/') . '$/', $file, $matches))
       {
         $timestamp = (int) $matches[1];
 
@@ -140,7 +145,7 @@ class DownloadlogField extends FormField
         if(($now - $timestamp) <= $maxAge && $timestamp > $latestTimestamp)
         {
           $latestTimestamp = $timestamp;
-          $latestFile = $file;
+          $latestFile      = $file;
         }
       }
     }
