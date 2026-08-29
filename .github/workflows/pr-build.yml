@@ -1,0 +1,51 @@
+name: PR Build ZIP
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'v*'
+
+jobs:
+  build-pr-zip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Sanitize PR title for filename
+        id: pr
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          safe_title=$(printf '%s' "$PR_TITLE" | tr -cd '[:alnum:]._-')
+          if [ -z "$safe_title" ]; then
+            safe_title="PR-${PR_NUMBER}"
+          fi
+          echo "safe_title=${safe_title}" >> "$GITHUB_OUTPUT"
+
+      - name: Build installable ZIP
+        env:
+          ZIP_NAME: plg_techspuur-${{ steps.pr.outputs.safe_title }}.zip
+        run: |
+          mkdir -p dist
+          cd plugin
+          zip -r "../dist/${ZIP_NAME}" techspuur.xml services language layouts src \
+            -x 'src/Extension/offlineuse.txt'
+
+      - name: Verify installable ZIP structure
+        env:
+          ZIP_NAME: plg_techspuur-${{ steps.pr.outputs.safe_title }}.zip
+        run: |
+          unzip -t "dist/${ZIP_NAME}"
+          unzip -Z1 "dist/${ZIP_NAME}" | grep -qx 'techspuur.xml'
+
+      - name: Upload installable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: plg_techspuur-${{ steps.pr.outputs.safe_title }}
+          path: dist/plg_techspuur-${{ steps.pr.outputs.safe_title }}.zip
+          retention-days: 60
+          if-no-files-found: error

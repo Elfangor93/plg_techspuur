@@ -1,0 +1,43 @@
+{
+    "name": "elfangor93/plg_techspuur",
+    "description": "Development tooling and build configuration for Tech.Spuur system plugin",
+    "license": "GPL-3.0-or-later",
+    "type": "project",
+    "require-dev": {
+        "joomla-projects/jorobo": "^0.14",
+        "friendsofphp/php-cs-fixer": "^3.88.0",
+        "squizlabs/php_codesniffer": "^3.13.4",
+        "slevomat/coding-standard": "^8.15",
+        "colinodell/indentation": "^1.0",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-deprecation-rules": "^2.0",
+        "rector/rector": "^2.1",
+        "joomla-projects/jrector": "^0.1.0",
+        "joomla-projects/typehints": "^0.1.0",
+        "symfony/console": ">=7.3 <7.4"
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.0"
+        },
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    },
+    "scripts": {
+        "post-install-cmd": [
+          "@install-component-dependencies",
+          "vendor/bin/phpcs --config-set installed_paths tools/phpcs,vendor/slevomat/coding-standard"
+        ],
+        "post-update-cmd": [
+          "@install-component-dependencies",
+          "vendor/bin/phpcs --config-set installed_paths tools/phpcs,vendor/slevomat/coding-standard"
+        ],
+        "cs-check": "php-cs-fixer fix -vvv --dry-run --diff",
+        "cs-fix": "php-cs-fixer fix",
+        "phpcs": "@php vendor/bin/phpcs --extensions=php -p --standard=ruleset.xml --runtime-set ignore_warnings_on_exit 1 plugin",
+        "phpcbf": "phpcbf --extensions=php -p --standard=ruleset.xml plugin",
+        "phpstan": "phpstan analyse",
+        "rector": "rector process --dry-run"
+    }
+}

@@ -54,7 +54,7 @@ class ChecklicenseField extends FormField
 	{
 		// Define inline Script
 		$js  = 'function checkLicense() {';
-		$js .=     'const selectElement = document.getElementById("jform_enabled");';
+		$js .=     'const selectElement = document.getElementById("jform_enabled") || document.getElementById("jform_published");';
 		$js .=     'if (selectElement) {';
 		$js .=        'selectElement.value = "1";';
 		$js .=        'const changeEvent = new Event("change", { bubbles: true });';
@@ -171,6 +171,7 @@ class ChecklicenseField extends FormField
     // Get extension info (with compatibility with JoomPlu < v1.2.3)
     $type    = isset($this->element['extension_type']) ? (string) $this->element['extension_type'] : 'plugin';
     $element = isset($this->element['extension_element']) ? (string) $this->element['extension_element'] : 'joomplupro';
+    $folder  = isset($this->element['extension_folder']) ? (string) $this->element['extension_folder'] : null;
 
     // Create query
     $query
@@ -181,6 +182,11 @@ class ChecklicenseField extends FormField
           $db->quoteName('element') . ' = ' . $db->quote($element),
         ]
       );
+
+    if($folder !== null)
+    {
+      $query->where($db->quoteName('folder') . ' = ' . $db->quote($folder));
+    }
 
     // Perform the query
     $db->setQuery($query);

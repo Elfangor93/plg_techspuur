@@ -250,10 +250,12 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $data  = $event->getData();
     }
 
-    // Set context
-    $this->guessContext($table->name);
+    $extensionName = $table->name ?? $table->module ?? '';
 
-    if($table->name == 'plg_system_techspuur')
+    // Set context
+    $this->guessContext($extensionName);
+
+    if($extensionName == 'plg_system_techspuur')
     {
       // We are saving this plugin form
       $array = ['create_log' => 'int', 'check_server' => 'int', 'refresh_list' => 'int', 'register_offline' => 'int'];
@@ -329,16 +331,46 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       return;
     }
 
-    if(!\in_array($table->name, $this->getExtensions('names', false)))
+    if(!$extensionName || !\in_array($extensionName, $this->getExtensions('names', false)))
     {
       return;
+    }
+
+    // Module configuration is stored per module instance. Keep the license
+    // credentials in the module extension params so scheduled checks can use
+    // them independently of any individual module instance.
+    $extension = $this->getExtension($extensionName);
+    if($extension->get('type') === 'module' && isset($data['params']))
+    {
+      $submittedParams = $data['params'] instanceof Registry ? $data['params']->toArray() : (array) $data['params'];
+      $licenseParams = [];
+      foreach(['username', 'dlid'] as $key)
+      {
+        if(\array_key_exists($key, $submittedParams))
+        {
+          $licenseParams[$key] = $submittedParams[$key];
+        }
+      }
+
+      if(!empty($licenseParams))
+      {
+        $this->setParamsData((int) $extension->get('extension_id'), $licenseParams);
+      }
     }
 
     $params = $this->getApplication()->input->getArray(['jform' => ['params' => ['force_update' => 'int']]]);
 
     if(\key_exists('force_update', $params['jform']['params']))
     {
-      $this->getApplication()->setUserState(\strtolower($table->name).'.license.force_update', \boolval($params['jform']['params']['force_update']));
+      $forceUpdate = \boolval($params['jform']['params']['force_update']);
+      $this->getApplication()->setUserState(\strtolower($extensionName).'.license.force_update', $forceUpdate);
+
+      // Module publication is stored in #__modules, whereas Techspuur disables
+      // the extension record. Re-enable that record before checking again.
+      if($forceUpdate && $extension->get('type') === 'module')
+      {
+        $this->enable((int) $extension->get('extension_id'));
+      }
     }
   }
 
@@ -370,17 +402,40 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $data = $event->getData();
     }
 
+    if(!$data || \is_array($data))
+    {
+      return;
+    }
+
+    // Plugins and components expose their identifier as "name", while module
+    // forms expose it as "module".
+    $extensionName = $data->name ?? $data->module ?? '';
+
     // Run this plugin only for tech.spuur extension forms
-    if(!$data || \is_array($data) || !\property_exists($data, 'name') || !\in_array($data->name, $this->getExtensions('names')))
+    if(!$extensionName || !\in_array($extensionName, $this->getExtensions('names')))
     {
       return;
     }
 
     // Set context
-    $this->guessContext($data->name);
+    $this->guessContext($extensionName);
 
     // Get the extension object
-    $extension = $this->getExtension($data->name);
+    $extension = $this->getExtension($extensionName);
+
+    // A module form contains instance params. Display and validate with the
+    // extension-global credentials used by automatic license checks.
+    if($extension->get('type') === 'module')
+    {
+      $extensionParams = $this->getParamsData((int) $extension->get('extension_id'));
+      foreach(['username', 'dlid'] as $key)
+      {
+        if($extensionParams->exists($key))
+        {
+          $data->params[$key] = $extensionParams->get($key);
+        }
+      }
+    }
 
     // Reset all state variables
     $this->getApplication()->setUserState($extension->get('element').'.fractions', null);
@@ -684,6 +739,43 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   }
 
   /**
+   * Stores extension-global parameters without replacing unrelated values.
+   *
+   * @param   int    $id      Extension ID
+   * @param   array  $values  Parameter values to store
+   *
+   * @return  void
+   *
+   * @since   __DEPLOY_VERSION__
+   */
+  private function setParamsData(int $id, array $values): void
+  {
+    $params = $this->getParamsData($id);
+
+    foreach($values as $key => $value)
+    {
+      $params->set($key, $value);
+    }
+
+    $query = $this->db->getQuery(true)
+      ->update($this->db->quoteName('#__extensions'))
+      ->set($this->db->quoteName('params') . ' = ' . $this->db->quote($params->toString('json')))
+      ->where($this->db->quoteName('extension_id') . ' = :extension_id')
+      ->bind(':extension_id', $id, ParameterType::INTEGER);
+
+    $this->db->setQuery($query);
+
+    try
+    {
+      $this->db->execute();
+    }
+    catch(\Exception $e)
+    {
+      Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_EXTENSION', $e->getMessage()), Log::ERROR, 'techspuur');
+    }
+  }
+
+  /**
    * Reads out the custom data of an extension from db
    * 
    * @param   int    $id      Extension id
@@ -899,6 +991,27 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     {
       Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_DISABLE', $e->getMessage()), Log::ERROR, 'techspuur');
     }
+  }
+
+  /**
+   * Enables an extension.
+   *
+   * @param   int  $id  Extension ID
+   *
+   * @return  void
+   *
+   * @since   __DEPLOY_VERSION__
+   */
+  private function enable(int $id): void
+  {
+    $query = $this->db->getQuery(true)
+      ->update($this->db->quoteName('#__extensions'))
+      ->set($this->db->quoteName('enabled') . ' = 1')
+      ->where($this->db->quoteName('extension_id') . ' = :extension_id')
+      ->bind(':extension_id', $id, ParameterType::INTEGER);
+
+    $this->db->setQuery($query);
+    $this->db->execute();
   }
 
   /**
