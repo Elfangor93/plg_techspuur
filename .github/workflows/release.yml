@@ -1,0 +1,45 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build installable zip
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Get tag name
+        id: get_tag
+        run: echo "tag_name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Build installable ZIP
+        env:
+          ZIP_NAME: plg_techspuur-${{ steps.get_tag.outputs.tag_name }}.zip
+        run: |
+          mkdir -p dist
+          cd plugin
+          zip -r "../dist/${ZIP_NAME}" techspuur.xml services language layouts src \
+            -x 'src/Extension/offlineuse.txt'
+
+      - name: Verify installable ZIP structure
+        env:
+          ZIP_NAME: plg_techspuur-${{ steps.get_tag.outputs.tag_name }}.zip
+        run: |
+          unzip -t "dist/${ZIP_NAME}"
+          unzip -Z1 "dist/${ZIP_NAME}" | grep -qx 'techspuur.xml'
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ steps.get_tag.outputs.tag_name }}
+          tag_name: ${{ steps.get_tag.outputs.tag_name }}
+          files: dist/plg_techspuur-${{ steps.get_tag.outputs.tag_name }}.zip
