@@ -17,7 +17,6 @@ use Joomla\CMS\Application\CMSWebApplicationInterface;
 use Joomla\CMS\Date\Date;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Filter\InputFilter;
-use Joomla\CMS\Http\HttpFactory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Log\Log;
 use Joomla\CMS\Plugin\CMSPlugin;
@@ -36,6 +35,10 @@ use Joomla\Registry\Registry;
  */
 class TechSpuur extends CMSPlugin implements SubscriberInterface
 {
+  private const EXTENSIONS_URL = 'https://updates.spuur.ch/extensions.xml';
+
+  private const LICENSE_PATH = '/index.php?option=com_sesamepayforaccess&view=licensevalidate&format=json';
+
   /**
    * Refresh interval in seconds.
    * How long to wait until we chek the license the next time.
@@ -83,6 +86,20 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    * @since  1.0.0
    */
   protected static $extensions = null;
+
+  /**
+   * Source of the currently loaded extensions XML: downloaded, cache or bundled.
+   *
+   * @var string
+   */
+  protected static $extensionsSource = '';
+
+  /**
+   * Whether the insecure local-development TLS warning has already been shown.
+   *
+   * @var bool
+   */
+  protected static $tlsWarningShown = false;
 
   /**
    * Storage for extension data
@@ -282,7 +299,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         // Refresh the list of extensions
         try
         {
-          $proExtensions = $this->requestExtensionData('https://updates.spuur.ch/extensions.xml', true);
+          $proExtensions = $this->requestExtensionData(self::EXTENSIONS_URL, true);
 
           if($proExtensions)
           {
@@ -596,7 +613,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    */
   private function getExtensions($mode = 'ids', $onlyEnabled = true): array
   {
-    $cdata = $this->requestExtensionData('https://updates.spuur.ch/extensions.xml');
+    $cdata = $this->requestExtensionData(self::EXTENSIONS_URL);
 
     if($this->id > 0 && empty(self::$data))
     {
@@ -1154,16 +1171,6 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       return;
     }
 
-    // Create request options
-    $options = new Registry();
-    $options->set('timeout', 15);
-
-    // Create the HTTP client
-    $http = HttpFactory::getHttp($options);
-
-    // URL to send request to
-    $url = 'https://tech.spuur.ch/index.php?option=com_sesamepayforaccess&view=licensevalidate&format=json';
-
     // Form data to send
     $formData = [
       'username' => $params->get('username'),
@@ -1185,8 +1192,21 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
 
     try
     {
-      // Send POST request with form data
-      $response = $http->post($url, $formData, $headers);
+      $serverConfig = $this->getLicenseServerConfig();
+      $url          = 'https://' . $serverConfig['host'] . self::LICENSE_PATH;
+      $curlHeaders  = [];
+
+      foreach($headers as $key => $value)
+      {
+        $curlHeaders[] = $key . ': ' . $value;
+      }
+
+      $curlResponse = $this->curlRequest($url, $payload, $curlHeaders);
+      $this->verifyLicenseServerIdentity($url, $curlResponse['info'], $curlResponse['headers']);
+      $response = (object) [
+        'code' => (int) $curlResponse['info']['http_code'],
+        'body' => $curlResponse['body'],
+      ];
 
       // Define default response license data
       $license_data = new Registry();
@@ -1233,7 +1253,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         $license_data->set('request_date', Factory::getDate()->toSql());
 
         // Get list of extensions
-        $this->requestExtensionData('https://updates.spuur.ch/extensions.xml', true);
+        $this->requestExtensionData(self::EXTENSIONS_URL, true);
 
         foreach(self::$extensions->extension as $ext)
         {
@@ -1289,7 +1309,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', 'Response code:' . $response->code . ', Response body:' . $response_body), Log::ERROR, 'techspuur');
       }
     }
-    catch(\Exception $e)
+    catch(\Throwable $e)
     {
       // Application Error
       Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', $e->getMessage()), Log::ERROR, 'techspuur');
@@ -1311,9 +1331,6 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    */
   private function checkLicenseServer($createLog)
   {
-    // URL to send request to
-    $url = 'https://tech.spuur.ch/index.php?option=com_sesamepayforaccess&view=licensevalidate&format=json';
-
     // Log file
     $tmp_folder  = $this->getApplication()->get('tmp_path');
     $logFilePath = $tmp_folder . '/techspuur/requestServer_log_' . time() . '.txt';
@@ -1345,57 +1362,26 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $curl_headers[] = "$key: $value";
     }
 
+    $verboseFile = null;
+
     // Create a raw cURL request for debugging
     try
     {
-      $ch = curl_init($url);
-
-      if($ch === false)
-      {
-        throw new \RuntimeException('Unable to initialize cURL.');
-      }
-
-      $options = [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $payload,
-        CURLOPT_HTTPHEADER     => $curl_headers,
-        CURLOPT_HEADER         => true,
-        CURLOPT_SSL_VERIFYHOST => 0,
-        CURLOPT_SSL_VERIFYPEER => 0,
-      ];
-
-      $verboseFile = null;
+      $serverConfig = $this->getLicenseServerConfig();
+      $url          = 'https://' . $serverConfig['host'] . self::LICENSE_PATH;
 
       if($createLog)
       {
-        $verboseFile              = fopen($logFilePath, 'w');
-        $options[CURLOPT_VERBOSE] = true;
-        $options[CURLOPT_STDERR]  = $verboseFile;
+        $verboseFile = fopen($logFilePath, 'w');
+
+        if($verboseFile === false)
+        {
+          throw new \RuntimeException('Unable to create the cURL log file.');
+        }
       }
 
-      curl_setopt_array($ch, $options);
-
-      $ch_res = curl_exec($ch);
-
-      if($ch_res === false)
-      {
-        throw new \RuntimeException(curl_error($ch));
-      }
-
-      $ch_info = curl_getinfo($ch);
-
-      if($createLog)
-      {
-        fclose($verboseFile);
-      }
-
-      curl_close($ch);
-
-      if($createLog)
-      {
-        file_put_contents($logFilePath, "\n\n=== RESPONSE BODY START ===\n" . $ch_res, FILE_APPEND);
-      }
+      $curlResponse = $this->curlRequest($url, $payload, $curl_headers, $verboseFile);
+      $this->verifyLicenseServerIdentity($url, $curlResponse['info'], $curlResponse['headers']);
     }
     catch(\Throwable $e)
     {
@@ -1403,24 +1389,61 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
 
       return;
     }
-
-    // Print message
-    $response = $this->parseResponse($ch_res);
-
-    if($ch_info['http_code'] == 200 || ($ch_info['http_code'] == 403 && $ch_info['primary_ip'] == '194.150.248.215'  && strtolower($response['server']) == 'litespeed'))
+    finally
     {
-      // Response coming from correct ip and correct server
-      $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_REQUEST') . ' <a data-bs-toggle="collapse" href="#collapseBody" role="button" aria-expanded="false" aria-controls="collapseBody"> ' . Text::_('PLG_SYSTEM_TECHSPUUR_SHOW_MORE') . '</a><div class="collapse" id="collapseBody"><br><br>Status code: ' . $ch_info['http_code'] . '<br>Body: ' . $response['body'] . '</div>', 'success');
+      if(is_resource($verboseFile))
+      {
+        fclose($verboseFile);
+      }
     }
-    elseif($ch_info['http_code'] == 0)
+
+    if($createLog)
     {
-      $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_FAILED_REQUEST') . '<br><br>Status code ' . $ch_info['http_code'], 'error');
+      file_put_contents(
+        $logFilePath,
+        "\n\n=== RESPONSE HEADERS ===\n" . $curlResponse['headers']
+          . "\n=== RESPONSE BODY ===\n" . $curlResponse['body'],
+        FILE_APPEND
+      );
+    }
+
+    // Print a short description for the most common HTTP response codes
+    $httpCode   = (int) $curlResponse['info']['http_code'];
+    $statusText = match($httpCode) {
+      200 => 'The license server responded successfully.',
+      400 => 'The license server rejected the request as invalid.',
+      401 => 'Authentication is required.',
+      403 => 'The license server is available, but access was denied for this test request. Thats expected behavior.',
+      404 => 'The license server endpoint was not found.',
+      408 => 'The request timed out.',
+      429 => 'Too many requests were sent. Please try again later.',
+      500 => 'The license server encountered an internal error.',
+      502 => 'The license server received an invalid upstream response.',
+      503 => 'The license server is temporarily unavailable.',
+      504 => 'The license server did not receive an upstream response in time.',
+      default => 'The license server returned an unexpected response.',
+    };
+
+    if($httpCode === 200 || $httpCode === 403)
+    {
+      // Correct response
+      $this->getApplication()->enqueueMessage(
+        Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_REQUEST') . '&nbsp;&nbsp;' .
+        '<a data-bs-toggle="collapse" href="#collapseBody" role="button" aria-expanded="false" aria-controls="collapseBody"> ' . Text::_('PLG_SYSTEM_TECHSPUUR_SHOW_MORE') . '</a>' .
+        '<div class="collapse" id="collapseBody"><hr><strong>Status code:</strong> ' . $httpCode . '<br><strong>Body:</strong> ' . $curlResponse['body'] . '<br><strong>Explanation:</strong> ' . $statusText . '</div>',
+        'success'
+      );
+    }
+    elseif($httpCode === 0)
+    {
+      // Network unavailable
+      $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_FAILED_REQUEST') . '<br><br><strong>Status code:</strong> ' . $httpCode . ' ; ' . $statusText, 'error');
       $this->getApplication()->enqueueMessage(Text::_('Network unavailable.'), 'error');
     }
     else
     {
-      // Something is blocking the request
-      $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_FAILED_REQUEST') . '<br><br>Status code ' . $ch_info['http_code'], 'error');
+      // Fallback: Something wrong
+      $this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_FAILED_REQUEST') . '<br><br><strong>Status code:</strong> ' . $httpCode . '<br><strong>Body:</strong> ' . $curlResponse['body'] . '<br><strong>Explanation:</strong> ' . $statusText, 'error');
       $this->getApplication()->enqueueMessage('<br>' . Text::_('PLG_SYSTEM_TECHSPUUR_ERROR_CHECK_SERVER'), 'error');
     }
   }
@@ -1629,36 +1652,29 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $time_diff    = $now->getTimestamp() - $last_request->getTimestamp();
     $context      = $this->guessContext();
 
-    if(!$force_update && ($time_diff < $this->refresh_rate))
+    if(!$force_update && $time_diff < $this->refresh_rate && self::$extensions instanceof \SimpleXMLElement)
     {
       // Validation should happen only once every xx seconds or when its enforced
       return false;
     }
 
-    if(\is_null(self::$extensions) || empty(self::$extensions))
+    if(\is_null(self::$extensions) || empty(self::$extensions) || $force_update)
     {
-      $local_xml = \dirname(__FILE__) . DIRECTORY_SEPARATOR . basename($url);
-
       try
       {
-        self::$extensions = $this->fetchXML($url);
-        self::$extensions->asXML($local_xml);
+        if($url !== self::EXTENSIONS_URL)
+        {
+          throw new \InvalidArgumentException('The extensions metadata URL is not allowed.');
+        }
+
+        self::$extensions = $this->loadExtensionsXml();
       }
-      catch(\Exception $e)
+      catch(\Throwable $e)
       {
         Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML_EXTENSIONS', $e->getMessage()), Log::ERROR, 'techspuur');
+        $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML_EXTENSIONS', $e->getMessage()), 'error');
 
-        if(!$force_update && is_file($local_xml))
-        {
-          // Load local xml instead
-          self::$extensions = simplexml_load_file($local_xml);
-        }
-        else
-        {
-          $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML_EXTENSIONS', 'Network unavailable.'), 'error');
-
-          return false;
-        }
+        return false;
       }
     }
 
@@ -1712,6 +1728,309 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   }
 
   /**
+   * Load validated extensions metadata from the network, cache or bundled fallback.
+   */
+  private function loadExtensionsXml(): \SimpleXMLElement
+  {
+    $cacheDir = JPATH_CACHE . DIRECTORY_SEPARATOR . 'plg_system_techspuur';
+    $cacheXml = $cacheDir . DIRECTORY_SEPARATOR . 'extensions.xml';
+    $localXml = __DIR__ . DIRECTORY_SEPARATOR . 'extensions.xml';
+
+    try
+    {
+      $downloaded = $this->downloadHttps(self::EXTENSIONS_URL);
+      $xml        = $this->validateExtensionsXml($downloaded);
+
+      if(!(is_dir($cacheDir) || mkdir($cacheDir, 0755, true))
+        || file_put_contents($cacheXml, $downloaded, LOCK_EX) === false)
+      {
+        Log::add('Unable to cache the validated extensions metadata.', Log::WARNING, 'techspuur');
+      }
+
+      self::$extensionsSource = 'downloaded';
+
+      return $xml;
+    }
+    catch(\Throwable $e)
+    {
+      Log::add('Unable to download extensions metadata: ' . $e->getMessage(), Log::WARNING, 'techspuur');
+    }
+
+    if(is_file($cacheXml))
+    {
+      try
+      {
+        $cached = file_get_contents($cacheXml);
+
+        if($cached === false)
+        {
+          throw new \RuntimeException('Unable to read the cached extensions metadata.');
+        }
+
+        $xml = $this->validateExtensionsXml($cached);
+        self::$extensionsSource = 'cache';
+
+        return $xml;
+      }
+      catch(\Throwable $e)
+      {
+        Log::add('Unable to use cached extensions metadata: ' . $e->getMessage(), Log::WARNING, 'techspuur');
+      }
+    }
+
+    $bundled = file_get_contents($localXml);
+
+    if($bundled === false)
+    {
+      throw new \RuntimeException('The bundled extensions metadata is unavailable.');
+    }
+
+    $xml = $this->validateExtensionsXml($bundled);
+    self::$extensionsSource = 'bundled';
+
+    return $xml;
+  }
+
+  /**
+   * Validate the extensions XML and its license-server identity data.
+   */
+  private function validateExtensionsXml(string $xmlBody): \SimpleXMLElement
+  {
+    $previous = libxml_use_internal_errors(true);
+    $xml      = simplexml_load_string($xmlBody, \SimpleXMLElement::class, LIBXML_NONET);
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+
+    if(!$xml instanceof \SimpleXMLElement || $xml->getName() !== 'extensionset')
+    {
+      throw new \RuntimeException('The extensions metadata XML structure is invalid.');
+    }
+
+    $this->readLicenseServerConfig($xml);
+
+    return $xml;
+  }
+
+  /**
+   * Read and validate the license-server identity from extensions metadata.
+   *
+   * @return array{host: string, server: string, addresses: array<int, string>}
+   */
+  private function readLicenseServerConfig(\SimpleXMLElement $xml): array
+  {
+    $host      = strtolower(trim((string) $xml->licenseServer['host']));
+    $server    = strtolower(trim((string) $xml->licenseServer['server']));
+    $addresses = [];
+
+    if(count($xml->licenseServer) !== 1
+      || filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) === false
+      || $server === '')
+    {
+      throw new \RuntimeException('The license-server host or server name is invalid.');
+    }
+
+    foreach($xml->licenseServer->address as $addressNode)
+    {
+      $address = trim((string) $addressNode);
+      $family  = strtolower(trim((string) $addressNode['family']));
+      $flag    = $family === 'ipv4' ? FILTER_FLAG_IPV4 : ($family === 'ipv6' ? FILTER_FLAG_IPV6 : 0);
+
+      if($flag === 0 || filter_var($address, FILTER_VALIDATE_IP, $flag) === false)
+      {
+        throw new \RuntimeException('The license-server IP address list is invalid.');
+      }
+
+      $addresses[] = $address;
+    }
+
+    if($addresses === [])
+    {
+      throw new \RuntimeException('The license-server IP address list is empty.');
+    }
+
+    return ['host' => $host, 'server' => $server, 'addresses' => $addresses];
+  }
+
+  /**
+   * Return the currently configured license server, loading metadata if needed.
+   *
+   * @return array{host: string, server: string, addresses: array<int, string>}
+   */
+  private function getLicenseServerConfig(): array
+  {
+    if(!(self::$extensions instanceof \SimpleXMLElement))
+    {
+      self::$extensions = $this->loadExtensionsXml();
+    }
+
+    return $this->readLicenseServerConfig(self::$extensions);
+  }
+
+  /**
+   * Download an HTTPS resource with TLS peer and hostname verification.
+   */
+  private function downloadHttps(string $url): string
+  {
+    $result = $this->curlRequest($url);
+
+    if((int) $result['info']['http_code'] !== 200)
+    {
+      throw new \RuntimeException('Download failed with HTTP status ' . (int) $result['info']['http_code'] . '.');
+    }
+
+    return $result['body'];
+  }
+
+  /**
+   * Determine whether TLS certificates must be verified.
+   * Verification can only be disabled explicitly while Joomla debug mode is active.
+   */
+  private function shouldVerifyTls(): bool
+  {
+    $disabled = defined('TECHSPUUR_DISABLE_TLS_VERIFICATION') && constant('TECHSPUUR_DISABLE_TLS_VERIFICATION') === true;
+    $debug    = defined('JDEBUG') && (bool) constant('JDEBUG');
+
+    if(!$disabled || !$debug)
+    {
+      return true;
+    }
+
+    if(!self::$tlsWarningShown)
+    {
+      $warning = Text::_('PLG_SYSTEM_TECHSPUUR_WARNING_TLS_DISABLED');
+      Factory::getApplication()->enqueueMessage($warning, 'warning');
+      Log::add($warning, Log::WARNING, 'techspuur');
+      self::$tlsWarningShown = true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Execute a TLS-verified cURL request.
+   *
+   * @param array<int, string> $headers
+   * @param resource|null      $verboseFile
+   *
+   * @return array{body: string, headers: string, info: array<string, mixed>}
+   */
+  private function curlRequest(string $url, ?string $payload = null, array $headers = [], $verboseFile = null): array
+  {
+    if(strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https')
+    {
+      throw new \InvalidArgumentException('Only HTTPS requests are allowed.');
+    }
+
+    $ch = curl_init($url);
+
+    if($ch === false)
+    {
+      throw new \RuntimeException('Unable to initialize cURL.');
+    }
+
+    $verifyTls = $this->shouldVerifyTls();
+    $options   = [
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_HEADER         => true,
+      CURLOPT_FOLLOWLOCATION => false,
+      CURLOPT_TIMEOUT        => 15,
+      CURLOPT_SSL_VERIFYHOST => $verifyTls ? 2 : 0,
+      CURLOPT_SSL_VERIFYPEER => $verifyTls,
+    ];
+
+    if($payload !== null)
+    {
+      $options[CURLOPT_POST]       = true;
+      $options[CURLOPT_POSTFIELDS] = $payload;
+    }
+
+    if($headers !== [])
+    {
+      $options[CURLOPT_HTTPHEADER] = $headers;
+    }
+
+    if(is_resource($verboseFile))
+    {
+      $options[CURLOPT_VERBOSE] = true;
+      $options[CURLOPT_STDERR]  = $verboseFile;
+    }
+
+    try
+    {
+      if(!curl_setopt_array($ch, $options))
+      {
+        throw new \RuntimeException('Unable to configure cURL.');
+      }
+
+      $raw = curl_exec($ch);
+
+      if($raw === false)
+      {
+        throw new \RuntimeException(curl_error($ch));
+      }
+
+      $info       = curl_getinfo($ch);
+      $headerSize = (int) ($info['header_size'] ?? 0);
+
+      return [
+        'headers' => substr($raw, 0, $headerSize),
+        'body'    => substr($raw, $headerSize),
+        'info'    => $info,
+      ];
+    }
+    finally
+    {
+      curl_close($ch);
+    }
+  }
+
+  /**
+   * Verify the connected license-server host, IP address and Server header.
+   *
+   * @param array<string, mixed> $info
+   *
+   * @return array{host: string, server: string, addresses: array<int, string>, primary_ip: string, response_server: string}
+   */
+  private function verifyLicenseServerIdentity(string $url, array $info, string $headers): array
+  {
+    $config         = $this->getLicenseServerConfig();
+    $requestHost    = strtolower((string) parse_url($url, PHP_URL_HOST));
+    $primaryIp      = (string) ($info['primary_ip'] ?? '');
+    $packedPrimary  = inet_pton($primaryIp);
+    $response       = $this->parseResponse($headers);
+    $responseServer = strtolower((string) ($response['server'] ?? ''));
+    $trustedIp      = false;
+
+    foreach($config['addresses'] as $address)
+    {
+      $packedAddress = inet_pton($address);
+
+      if($packedPrimary !== false && $packedAddress !== false && hash_equals($packedAddress, $packedPrimary))
+      {
+        $trustedIp = true;
+        break;
+      }
+    }
+
+    if($requestHost !== $config['host'])
+    {
+      throw new \RuntimeException('The license request hostname does not match the configured hostname.');
+    }
+
+    if(!$trustedIp)
+    {
+      throw new \RuntimeException('The connected license-server IP address is not trusted: ' . $primaryIp);
+    }
+
+    if($responseServer !== $config['server'])
+    {
+      throw new \RuntimeException('The license-server response name is not trusted: ' . $responseServer);
+    }
+
+    return $config + ['primary_ip' => $primaryIp, 'response_server' => $responseServer];
+  }
+
+  /**
    * Method to load an XML from the web.
    *
    * @param   string  $uri  The URI of the feed to load. Idn uris must be passed already converted to punycode.
@@ -1730,32 +2049,18 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     // Enable internal error handling for better debugging
     libxml_use_internal_errors(true);
 
-    // Open the URI within the stream reader.
-    if(!$reader->open($uri, null, LIBXML_NOWARNING | LIBXML_NOERROR))
+    try
     {
-      // Handle errors and retry using an HTTP client fallback
-      $options = new Registry();
-      $options->set('userAgent', 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:41.0) Gecko/20100101 Firefox/41.0');
+      $body = $this->downloadHttps($uri);
+    }
+    catch(\Throwable $e)
+    {
+      throw new \RuntimeException('Unable to open the feed.', $e->getCode(), $e);
+    }
 
-      try
-      {
-        $response = HttpFactory::getHttp($options)->get($uri);
-      }
-      catch(\RuntimeException $e)
-      {
-        throw new \RuntimeException('Unable to open the feed.', $e->getCode(), $e);
-      }
-
-      if($response->code != 200)
-      {
-        throw new \RuntimeException('Unable to open the feed.');
-      }
-
-      // Set the value to the XMLReader parser
-      if(!$reader->XML($response->body, null, LIBXML_NOWARNING | LIBXML_NOERROR))
-      {
-        throw new \RuntimeException('Unable to parse the feed.');
-      }
+    if(!$reader->XML($body, null, LIBXML_NOWARNING | LIBXML_NOERROR | LIBXML_NONET))
+    {
+      throw new \RuntimeException('Unable to parse the feed.');
     }
 
     try
