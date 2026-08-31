@@ -1,5 +1,5 @@
 **************************************************************************
-   @package    plg_techspuur                                            **
+   @package    plg_system_techspuur                                     **
    @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
    @copyright  2026 Manuel Haeusler                                     **
    @license    GNU General Public License version 3 or later            **

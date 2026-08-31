@@ -1,15 +1,18 @@
 <?php
 /**
-****************************************************************************
-**   @package    plg_system_techspuur                                     **
-**   @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
-**   @copyright  2025 Manuel Haeusler                                     **
-**   @license    GNU General Public License version 3 or later            **
-****************************************************************************/
+ * **************************************************************************
+ *    @package    plg_system_techspuur                                     **
+ *    @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
+ *    @copyright  2026 Manuel Haeusler                                     **
+ *    @license    GNU General Public License version 3 or later            **
+ * **************************************************************************
+ */
 
-defined('_JEXEC') or die;
+\defined('_JEXEC') || die;
 
 use Joomla\CMS\Language\Text;
+
+/** @var object $displayData */
 ?>
 
 <h4><?php echo Text::_('PLG_SYSTEM_TECHSPUUR_EXTENSIONS_TITLE'); ?></h4>
@@ -48,12 +51,13 @@ use Joomla\CMS\Language\Text;
         <td class="d-md-table-cell">
           <?php
             $license = (string) $extension['license'];
-            if($license == 'pro')
-            {
-              $license = 'paid';
-            }
-            echo $license;
-          ?>
+
+      if($license == 'pro')
+      {
+        $license = 'paid';
+      }
+      echo $license;
+      ?>
         </td>
         <td class="d-md-table-cell">
           <?php echo (string) $extension['version']; ?>

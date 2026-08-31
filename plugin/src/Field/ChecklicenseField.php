@@ -1,103 +1,107 @@
 <?php
 /**
-****************************************************************************
-**   @package    plg_system_joomplupro                                    **
-**   @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
-**   @copyright  2025 Manuel Haeusler                                     **
-**   @license    GNU General Public License version 3 or later            **
-****************************************************************************/
+ * **************************************************************************
+ *    @package    plg_system_techspuur                                     **
+ *    @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
+ *    @copyright  2026 Manuel Haeusler                                     **
+ *    @license    GNU General Public License version 3 or later            **
+ * **************************************************************************
+ */
 
 namespace Elfangor93\Plugin\System\Techspuur\Field;
 
-defined('_JEXEC') or die();
+\defined('_JEXEC') || die();
 
-use \Joomla\CMS\Factory;
-use \Joomla\CMS\Form\FormField;
-use \Joomla\CMS\Language\Text;
-use \Joomla\Database\DatabaseInterface;
-use \Joomla\CMS\HTML\HTMLHelper;
+use Joomla\CMS\Factory;
+use Joomla\CMS\Form\FormField;
+use Joomla\CMS\HTML\HTMLHelper;
+use Joomla\CMS\Language\Text;
+use Joomla\Database\DatabaseInterface;
 
 class ChecklicenseField extends FormField
 {
-	/**
-	 * The form field type.
-	 *
-	 * @var    string
-	 * @since  1.0.0
-	 */
-	protected $type = 'checklicense';
+  /**
+   * The form field type.
+   *
+   * @var    string
+   * @since  1.0.0
+   */
+  protected $type = 'checklicense';
 
-	/**
-	 * Hide the label when rendering the form field.
-	 *
-	 * @var    boolean
-	 * @since  1.0.0
-	 */
-	protected $hiddenLabel = false;
+  /**
+   * Hide the label when rendering the form field.
+   *
+   * @var    boolean
+   * @since  1.0.0
+   */
+  protected $hiddenLabel = false;
 
-	/**
-	 * Hide the description when rendering the form field.
-	 *
-	 * @var    boolean
-	 * @since  1.0.0
-	 */
-	protected $hiddenDescription = false;
+  /**
+   * Hide the description when rendering the form field.
+   *
+   * @var    boolean
+   * @since  1.0.0
+   */
+  protected $hiddenDescription = false;
 
-	/**
-	 * Method to get the field label markup.
-	 *
-	 * @return  string  The field label markup.
-	 *
-	 * @since   1.0.0
-	 */
-	protected function getLabel()
-	{
-		// Define inline Script
-		$js  = 'function checkLicense() {';
-		$js .=     'const selectElement = document.getElementById("jform_enabled") || document.getElementById("jform_published");';
-		$js .=     'if (selectElement) {';
-		$js .=        'selectElement.value = "1";';
-		$js .=        'const changeEvent = new Event("change", { bubbles: true });';
-		$js .=        'selectElement.dispatchEvent(changeEvent);';
-		$js .=     '}';
-		$js .=     'const form = document.querySelector(\'main form[name="adminForm"]\');';
-		$js .=     'if (form) {';
-		$js .=        'const hiddenInput = document.createElement("input");';
-		$js .=        'hiddenInput.type = "hidden";';
-		$js .=        'hiddenInput.name = "jform[params][force_update]";';
-		$js .=        'hiddenInput.value = "1";';
-		$js .=        'form.appendChild(hiddenInput);';
-		$js .=     '}';
-		$js .=     'const toolbarApply = document.getElementById("toolbar-apply");';
-		$js .=     'if (toolbarApply) {';
-		$js .=        'const button = toolbarApply.querySelector("button");';
-		$js .=        'if (button) {';
-		$js .=           'button.click();';
-		$js .=        '}';
-		$js .=     '}';
-		$js .= '};';
+  /**
+   * Method to get the field label markup.
+   *
+   * @return  string  The field label markup.
+   *
+   * @since   1.0.0
+   */
+  protected function getLabel()
+  {
+    // Define inline Script
+    $js  = 'function checkLicense() {';
+    $js .=     'const selectElement = document.getElementById("jform_enabled") || document.getElementById("jform_published");';
+    $js .=     'if (selectElement) {';
+    $js .=        'selectElement.value = "1";';
+    $js .=        'const changeEvent = new Event("change", { bubbles: true });';
+    $js .=        'selectElement.dispatchEvent(changeEvent);';
+    $js .=     '}';
+    $js .=     'const form = document.querySelector(\'main form[name="adminForm"]\');';
+    $js .=     'if (form) {';
+    $js .=        'const hiddenInput = document.createElement("input");';
+    $js .=        'hiddenInput.type = "hidden";';
+    $js .=        'hiddenInput.name = "jform[params][force_update]";';
+    $js .=        'hiddenInput.value = "1";';
+    $js .=        'form.appendChild(hiddenInput);';
+    $js .=     '}';
+    $js .=     'const toolbarApply = document.getElementById("toolbar-apply");';
+    $js .=     'if (toolbarApply) {';
+    $js .=        'const button = toolbarApply.querySelector("button");';
+    $js .=        'if (button) {';
+    $js .=           'button.click();';
+    $js .=        '}';
+    $js .=     '}';
+    $js .= '};';
 
-		/** @var Joomla\CMS\WebAsset\WebAssetManager $wa */
-		$wa = Factory::getApplication()->getDocument()->getWebAssetManager();
-		$wa->addInlineScript($js);
+    /** @var \Joomla\CMS\Application\CMSWebApplicationInterface $app */
+    $app = Factory::getApplication();
 
-		$html = '<button class="btn btn-primary" onclick="checkLicense();"><span class="icon icon-tag"></span> ' . Text::_($this->element['label']) . '</button>';
+    $wa = $app->getDocument()->getWebAssetManager();
+    $wa->addInlineScript($js);
 
-		return $html;
-	}
+    $html = '<button class="btn btn-primary" onclick="checkLicense();"><span class="icon icon-tag"></span> ' . Text::_($this->element['label']) . '</button>';
 
-	/**
-	 * Method to get the field input markup.
-	 *
-	 * @return  string  The field input markup.
-	 *
-	 * @since   1.0.0
-	 */
-	protected function getInput()
-	{
+    return $html;
+  }
+
+  /**
+   * Method to get the field input markup.
+   *
+   * @return  string  The field input markup.
+   *
+   * @since   1.0.0
+   */
+  protected function getInput()
+  {
     try {
       $data = $this->getLicenseData();
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $data = null;
     }
 
@@ -114,8 +118,10 @@ class ChecklicenseField extends FormField
     $css .= '.license-icon .label {padding-left: 1rem; display: inline-block;}';
     $css .= '.license-icon + div {margin-top: 0.4rem;}';
 
-    /** @var Joomla\CMS\WebAsset\WebAssetManager $wa */
-    $wa = Factory::getApplication()->getDocument()->getWebAssetManager();
+    /** @var \Joomla\CMS\Application\CMSWebApplicationInterface $app */
+    $app = Factory::getApplication();
+
+    $wa = $app->getDocument()->getWebAssetManager();
     $wa->addInlineStyle($css);
 
     $icon_class = 'icon-unfeatured';
@@ -131,7 +137,7 @@ class ChecklicenseField extends FormField
           $icon_class = 'icon-publish';
           $exp_date   = HTMLHelper::_('date', $data->expiration_date, Text::_('DATE_FORMAT_LC4'));
           $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_ACTIVE');
-          $state_txt  .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
+          $state_txt .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
           break;
 
         case 2:
@@ -139,7 +145,7 @@ class ChecklicenseField extends FormField
           $icon_class = 'icon-unpublish';
           $exp_date   = HTMLHelper::_('date', $data->expiration_date, Text::_('DATE_FORMAT_LC4'));
           $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_EXPIRED');
-          $state_txt  .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
+          $state_txt .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
           break;
 
         case 0:
@@ -147,25 +153,25 @@ class ChecklicenseField extends FormField
           $icon_class = 'icon-unpublish';
           $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_DISABLED');
           break;
-        
+
         default:
           break;
-      }      
+      }
     }
 
-    return '<div class="license-icon"><span class="icon '.$icon_class.'" aria-hidden="true"></span><span class="label"><strong>'.$state_lbl.':</strong> '.$state_txt.'</span></div>';
-	}
+    return '<div class="license-icon"><span class="icon ' . $icon_class . '" aria-hidden="true"></span><span class="label"><strong>' . $state_lbl . ':</strong> ' . $state_txt . '</span></div>';
+  }
 
   /**
-	 * Method to get the license data.
-	 *
-	 * @return  object
-	 *
-	 * @since   1.0.0
-	 */
-	protected function getLicenseData()
-	{
-    $db = Factory::getContainer()->get(DatabaseInterface::class);
+   * Method to get the license data.
+   *
+   * @return  object
+   *
+   * @since   1.0.0
+   */
+  protected function getLicenseData()
+  {
+    $db    = Factory::getContainer()->get(DatabaseInterface::class);
     $query = $db->getQuery(true);
 
     // Get extension info (with compatibility with JoomPlu < v1.2.3)
@@ -178,7 +184,8 @@ class ChecklicenseField extends FormField
       ->select($db->quoteName('custom_data'))
       ->from($db->quoteName('#__extensions'))
       ->where(
-        [ $db->quoteName('type') . ' = ' . $db->quote($type),
+        [
+          $db->quoteName('type') . ' = ' . $db->quote($type),
           $db->quoteName('element') . ' = ' . $db->quote($element),
         ]
       );
@@ -192,6 +199,6 @@ class ChecklicenseField extends FormField
     $db->setQuery($query);
     $result = $db->loadResult();
 
-    return \json_decode($result);
-	}
+    return json_decode($result);
+  }
 }
