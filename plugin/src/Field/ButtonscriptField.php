@@ -70,8 +70,10 @@ class ButtonscriptField extends FormField
     $js .=     '}';
     $js .= '};';
 
-    /** @var Joomla\CMS\WebAsset\WebAssetManager $wa */
-    $wa = Factory::getApplication()->getDocument()->getWebAssetManager();
+    /** @var \Joomla\CMS\Application\CMSWebApplicationInterface $app */
+    $app = Factory::getApplication();
+
+    $wa = $app->getDocument()->getWebAssetManager();
     $wa->addInlineScript($js, ['name' => 'techspuur.button.script']);
 
     $icon = '';

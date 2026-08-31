@@ -28,9 +28,7 @@ return new class implements ServiceProviderInterface
       function (Container $container) {
         $config  = (array)PluginHelper::getPlugin('system', 'techspuur');
         $subject = $container->get(DispatcherInterface::class);
-
-        /** @var \Joomla\CMS\Plugin\CMSPlugin $plugin */
-        $plugin = new TechSpuur($subject, $config);
+        $plugin  = new TechSpuur($subject, $config);
         $plugin->setApplication(Factory::getApplication());
 
         return $plugin;

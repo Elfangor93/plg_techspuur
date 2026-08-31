@@ -11,6 +11,8 @@
 \defined('_JEXEC') || die;
 
 use Joomla\CMS\Language\Text;
+
+/** @var object $displayData */
 ?>
 
 <h4><?php echo Text::_('PLG_SYSTEM_TECHSPUUR_EXTENSIONS_TITLE'); ?></h4>

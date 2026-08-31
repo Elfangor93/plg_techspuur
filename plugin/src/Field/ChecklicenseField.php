@@ -78,8 +78,10 @@ class ChecklicenseField extends FormField
     $js .=     '}';
     $js .= '};';
 
-    /** @var Joomla\CMS\WebAsset\WebAssetManager $wa */
-    $wa = Factory::getApplication()->getDocument()->getWebAssetManager();
+    /** @var \Joomla\CMS\Application\CMSWebApplicationInterface $app */
+    $app = Factory::getApplication();
+
+    $wa = $app->getDocument()->getWebAssetManager();
     $wa->addInlineScript($js);
 
     $html = '<button class="btn btn-primary" onclick="checkLicense();"><span class="icon icon-tag"></span> ' . Text::_($this->element['label']) . '</button>';
@@ -116,8 +118,10 @@ class ChecklicenseField extends FormField
     $css .= '.license-icon .label {padding-left: 1rem; display: inline-block;}';
     $css .= '.license-icon + div {margin-top: 0.4rem;}';
 
-    /** @var Joomla\CMS\WebAsset\WebAssetManager $wa */
-    $wa = Factory::getApplication()->getDocument()->getWebAssetManager();
+    /** @var \Joomla\CMS\Application\CMSWebApplicationInterface $app */
+    $app = Factory::getApplication();
+
+    $wa = $app->getDocument()->getWebAssetManager();
     $wa->addInlineStyle($css);
 
     $icon_class = 'icon-unfeatured';
@@ -134,7 +138,7 @@ class ChecklicenseField extends FormField
           $exp_date   = HTMLHelper::_('date', $data->expiration_date, Text::_('DATE_FORMAT_LC4'));
           $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_ACTIVE');
           $state_txt .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
-            break;
+          break;
 
         case 2:
           // License expired
@@ -142,16 +146,16 @@ class ChecklicenseField extends FormField
           $exp_date   = HTMLHelper::_('date', $data->expiration_date, Text::_('DATE_FORMAT_LC4'));
           $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_EXPIRED');
           $state_txt .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
-            break;
+          break;
 
         case 0:
           // License disabled / User blocked
           $icon_class = 'icon-unpublish';
           $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_DISABLED');
-            break;
+          break;
 
         default:
-            break;
+          break;
       }
     }
 

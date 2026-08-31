@@ -13,6 +13,7 @@ namespace Elfangor93\Plugin\System\Techspuur\Extension;
 // No direct access
 \defined('_JEXEC') || die;
 
+use Joomla\CMS\Application\CMSWebApplicationInterface;
 use Joomla\CMS\Date\Date;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Filter\InputFilter;
@@ -22,6 +23,7 @@ use Joomla\CMS\Log\Log;
 use Joomla\CMS\Plugin\CMSPlugin;
 use Joomla\CMS\Uri\Uri;
 use Joomla\Database\ParameterType;
+use Joomla\Event\DispatcherInterface;
 use Joomla\Event\Event;
 use Joomla\Event\Priority;
 use Joomla\Event\SubscriberInterface;
@@ -54,7 +56,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   /**
    * Global database object
    *
-   * @var   \JDatabaseDriver
+   * @var   \Joomla\Database\DatabaseDriver
    * @since  1.0.0
    */
   protected $db = null;
@@ -152,9 +154,12 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    */
   public function onAfterRoute()
   {
+    $app = $this->getApplication();
+
     // This feature only applies in the site and administrator applications
-    if( !$this->getApplication()->isClient('site') &&
-        !$this->getApplication()->isClient('administrator')
+    if(
+      !($app instanceof CMSWebApplicationInterface) ||
+      (!$app->isClient('site') && !$app->isClient('administrator'))
     )
     {
       return;
@@ -201,9 +206,9 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
 
     // Show license messages in dependent component backend
-    $option = $this->getApplication()->input->get('option');
+    $option = $app->getInput()->get('option');
 
-    if( $this->getApplication()->isClient('administrator') &&
+    if( $app->isClient('administrator') &&
         $option && key_exists($option, self::$dependencies)
     )
     {
@@ -212,23 +217,22 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         // Show message if we have an invalid license
         $extension = self::$data[$ext_id];
 
-        if($this->getApplication()->getUserState($extension->get('element') . '.license.state', -1) !== 1)
+        if($app->getUserState($extension->get('element') . '.license.state', -1) !== 1)
         {
-          $msg_type = $this->getApplication()->getUserState($extension->get('element') . '.license.msg-type', 'message');
-          $msg_text = $this->getApplication()->getUserState($extension->get('element') . '.license.msg-text', '');
-          $this->getApplication()->enqueueMessage($msg_text, $msg_type);
+          $msg_type = $app->getUserState($extension->get('element') . '.license.msg-type', 'message');
+          $msg_text = $app->getUserState($extension->get('element') . '.license.msg-text', '');
+          $app->enqueueMessage($msg_text, $msg_type);
         }
-      }
+        // Check if we have a compatible component version
+        $version_com   = (string) $this->loadXMLFile($option)->version;
+        $compatibility = (string) $this->loadXMLFile($extension->get('extension_id'))->compatibility;
 
-      // Check if we have a compatible component version
-      $version_com   = (string) $this->loadXMLFile($option)->version;
-      $compatibility = (string) $this->loadXMLFile($extension->get('extension_id'))->compatibility;
-
-      if($version_com && $compatibility && !preg_match('/^' . $compatibility . '/', $version_com))
-      {
-        // Incompatible component version
-        $lang_prefix = strtoupper($extension->get('name'));
-        $this->getApplication()->enqueueMessage(\sprintf(Text::_($lang_prefix . '_MSG_VERSION_HINT'), $version_com), 'error');
+        if($version_com && $compatibility && !preg_match('/^' . $compatibility . '/', $version_com))
+        {
+          // Incompatible component version
+          $lang_prefix = strtoupper($extension->get('name'));
+          $app->enqueueMessage(\sprintf(Text::_($lang_prefix . '_MSG_VERSION_HINT'), $version_com), 'error');
+        }
       }
     }
   }
@@ -264,7 +268,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     {
       // We are saving this plugin form
       $array  = ['create_log' => 'int', 'check_server' => 'int', 'refresh_list' => 'int', 'register_offline' => 'int'];
-      $params = $this->getApplication()->input->getArray(['jform' => ['params' => $array]]);
+      $params = $this->getApplication()->getInput()->getArray(['jform' => ['params' => $array]]);
       $params = $params['jform']['params'];
 
       if($params['check_server'])
@@ -367,12 +371,19 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       }
     }
 
-    $params = $this->getApplication()->input->getArray(['jform' => ['params' => ['force_update' => 'int']]]);
+    $params = $this->getApplication()->getInput()->getArray(['jform' => ['params' => ['force_update' => 'int']]]);
 
     if(key_exists('force_update', $params['jform']['params']))
     {
+      $app = $this->getApplication();
+
+      if(!($app instanceof CMSWebApplicationInterface) || !$app->isClient('administrator'))
+      {
+        return;
+      }
+
       $forceUpdate = \boolval($params['jform']['params']['force_update']);
-      $this->getApplication()->setUserState(strtolower($extensionName) . '.license.force_update', $forceUpdate);
+      $app->setUserState(strtolower($extensionName) . '.license.force_update', $forceUpdate);
 
       // Module publication is stored in #__modules, whereas Techspuur disables
       // the extension record. Re-enable that record before checking again.
@@ -393,8 +404,10 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    */
   public function onContentPrepareForm(Event $event)
   {
+    $app = $this->getApplication();
+
     // Run this plugin only on the backend website
-    if(!$this->getApplication()->isClient('administrator'))
+    if(!($app instanceof CMSWebApplicationInterface) || !$app->isClient('administrator'))
     {
       return;
     }
@@ -448,15 +461,15 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
 
     // Reset all state variables
-    $this->getApplication()->setUserState($extension->get('element') . '.fractions', null);
-    $this->getApplication()->setUserState($extension->get('element') . '.license.msg-type', 'message');
-    $this->getApplication()->setUserState($extension->get('element') . '.license.msg-text', '');
-    $this->getApplication()->setUserState($extension->get('element') . '.request.date', null);
-    $this->getApplication()->setUserState($extension->get('element') . '.license.state', null);
+    $app->setUserState($extension->get('element') . '.fractions', null);
+    $app->setUserState($extension->get('element') . '.license.msg-type', 'message');
+    $app->setUserState($extension->get('element') . '.license.msg-text', '');
+    $app->setUserState($extension->get('element') . '.request.date', null);
+    $app->setUserState($extension->get('element') . '.license.state', null);
 
     if( key_exists('username', $data->params) && $data->params['username'] &&
         key_exists('dlid', $data->params) && $data->params['dlid'] &&
-        $this->getApplication()->getUserState(strtolower($extension->get('name')) . '.license.force_update', false)
+        $app->getUserState(strtolower($extension->get('name')) . '.license.force_update', false)
     )
     {
       $this->loadLanguageFile($extension->get('extension_id'));
@@ -465,7 +478,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $data_params    = new Registry($data->params);
       $ressource_name = Text::_(strtoupper($extension->get('name')) . '_SPFA_RESSOURCE_NAME'); // Name of the SPFA ressource
       $this->requestLicenseData($extension->get('extension_id'), $data_params, $extension->get('element'), $ressource_name, true);
-      $this->getApplication()->setUserState(strtolower($extension->get('name')) . '.license.force_update', false);
+      $app->setUserState(strtolower($extension->get('name')) . '.license.force_update', false);
     }
 
     try
@@ -480,9 +493,9 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
 
     // Display the license message
-    $msg_type = $this->getApplication()->getUserState($extension->get('element') . '.license.msg-type', 'message');
-    $msg_text = $this->getApplication()->getUserState($extension->get('element') . '.license.msg-text', '');
-    $this->getApplication()->enqueueMessage($msg_text, $msg_type);
+    $msg_type = $app->getUserState($extension->get('element') . '.license.msg-type', 'message');
+    $msg_text = $app->getUserState($extension->get('element') . '.license.msg-text', '');
+    $app->enqueueMessage($msg_text, $msg_type);
 
     return;
   }
@@ -506,17 +519,17 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     // Read query variables
     $cont_arr = [];
 
-    if($option = $this->getApplication()->input->get('option', false))
+    if($option = $this->getApplication()->getInput()->get('option', false))
     {
       array_push($cont_arr, $option);
     }
 
-    if($view = $this->getApplication()->input->get('view', false))
+    if($view = $this->getApplication()->getInput()->get('view', false))
     {
       array_push($cont_arr, $view);
     }
 
-    if($task = $this->getApplication()->input->get('task', false))
+    if($task = $this->getApplication()->getInput()->get('task', false))
     {
       array_push($cont_arr, $task);
     }
@@ -615,6 +628,8 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
 
         $this->db->setQuery($query);
 
+        $extensions = [];
+
         try
         {
           $extensions = $this->db->loadObjectList('extension_id') ?: [];
@@ -694,7 +709,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       throw new \Exception('Either the ID or a unique name of the extension has to be provided.', 1);
     }
 
-    if($id > 0 && (!key_exists($id, self::$data) && empty(self::$data[$id])))
+    if($id > 0 && !isset(self::$data[$id]))
     {
       $query = $this->db->getQuery(true);
 
@@ -707,14 +722,23 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
 
       try
       {
-        $extension = new Registry($this->db->loadObject());
+        $result = $this->db->loadObject();
+
+        if($result === null)
+        {
+          throw new \RuntimeException('Extension with ID ' . $id . ' was not found.');
+        }
+
+        $extension = new Registry($result);
       }
-      catch(\Exception $e)
+      catch(\Throwable $e)
       {
         Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_EXTENSION', $e->getMessage()), Log::ERROR, 'techspuur');
+
+        throw $e;
       }
 
-      if($store && $extension)
+      if($store)
       {
         self::$data[$id] = $extension;
       }
@@ -893,19 +917,19 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     {
       case 'plugin':
         $path = JPATH_SITE . '/plugins/' . $extension->get('folder') . '/' . $extension->get('element');
-          break;
+        break;
 
       case 'module':
         $path = $base . '/modules/' . $extension->get('name');
-          break;
+        break;
 
       case 'component':
         $path = JPATH_ADMINISTRATOR . '/components/' . $extension->get('name');
-          break;
+        break;
 
       default:
         $path = $base;
-          break;
+        break;
     }
 
     $lang = $this->getApplication()->getLanguage();
@@ -917,7 +941,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    *
    * @param   int|string     $id      Extension id
    *
-   * @return  SimpleXMLElement
+   * @return  \SimpleXMLElement
    *
    * @since   1.0.0
    */
@@ -937,22 +961,22 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       case 'plugin':
         $path   = JPATH_SITE . '/plugins/' . $extension->get('folder') . '/' . $extension->get('element');
         $prefix = 'plg_';
-          break;
+        break;
 
       case 'module':
         $path   = $base . '/modules/' . $extension->get('name');
         $prefix = 'mod_';
-          break;
+        break;
 
       case 'component':
         $path   = JPATH_ADMINISTRATOR . '/components/' . $extension->get('name');
         $prefix = 'com_';
-          break;
+        break;
 
       default:
         $path   = $base;
         $prefix = '';
-          break;
+        break;
     }
 
     // XML without prefix
@@ -1096,6 +1120,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
 
     // Only request once a day or if no custom data is available
+    $app          = $this->getApplication();
     $now          = Factory::getDate();
     $last_request = $this->getLastRequest($id, $element);
     $time_diff    = $now->getTimestamp() - $last_request->getTimestamp();
@@ -1118,6 +1143,14 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     if(!$force_update && ($time_diff < $this->refresh_rate || $offlineuse))
     {
       // Validation should happen only once every xx seconds or when its enforced
+      return;
+    }
+
+    // This feature only applies in the site and administrator applications
+    if( !($app instanceof CMSWebApplicationInterface) ||
+        (!$app->isClient('site') && !$app->isClient('administrator'))
+      )
+    {
       return;
     }
 
@@ -1234,13 +1267,13 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
           Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_LICENSE_RECEIVED_DATA', $logdata_received), Log::WARNING, 'techspuur');
         }
 
-        $this->getApplication()->setUserState($element . '.request.date', $license_data->get('request_date'));
+        $app->setUserState($element . '.request.date', $license_data->get('request_date'));
       }
       elseif($response->code < 500)
       {
         // Access denied
         Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', 'Response code:' . $response->code . ', Response body:' . $response->body), Log::WARNING, 'techspuur');
-        $this->getApplication()->setUserState($element . '.request.date', $license_data->get('request_date'));
+        $app->setUserState($element . '.request.date', $license_data->get('request_date'));
       }
       else
       {
@@ -1315,7 +1348,13 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     // Create a raw cURL request for debugging
     try
     {
-      $ch      = curl_init($url);
+      $ch = curl_init($url);
+
+      if($ch === false)
+      {
+        throw new \RuntimeException('Unable to initialize cURL.');
+      }
+
       $options = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
@@ -1337,7 +1376,13 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
 
       curl_setopt_array($ch, $options);
 
-      $ch_res  = curl_exec($ch);
+      $ch_res = curl_exec($ch);
+
+      if($ch_res === false)
+      {
+        throw new \RuntimeException(curl_error($ch));
+      }
+
       $ch_info = curl_getinfo($ch);
 
       if($createLog)
@@ -1352,9 +1397,11 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         file_put_contents($logFilePath, "\n\n=== RESPONSE BODY START ===\n" . $ch_res, FILE_APPEND);
       }
     }
-    catch(\Exception $e)
+    catch(\Throwable $e)
     {
       $this->getApplication()->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST', $e->getMessage()), 'error');
+
+      return;
     }
 
     // Print message
@@ -1456,7 +1503,17 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    */
   private function getLastRequest(int $id, string $element, bool $license = true)
   {
-    $date = $this->getApplication()->getUserState($element . '.request.date', null);
+    $app = $this->getApplication();
+
+    // This feature only applies in the site and administrator applications
+    if( !($app instanceof CMSWebApplicationInterface) ||
+        (!$app->isClient('site') && !$app->isClient('administrator'))
+      )
+    {
+      return new Date('1900-02-02 10:00:00');
+    }
+
+    $date = $app->getUserState($element . '.request.date', null);
 
     if(empty($date))
     {
@@ -1481,6 +1538,16 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    */
   private function checkLicenseData(int $id, string $element, string $name, $data = null)
   {
+    $app = $this->getApplication();
+
+    // This feature only applies in the site and administrator applications
+    if( !($app instanceof CMSWebApplicationInterface) ||
+        (!$app->isClient('site') && !$app->isClient('administrator'))
+      )
+    {
+      return;
+    }
+
     $this->loadLanguageFile($id);
 
     // Get license data
@@ -1508,29 +1575,29 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
 
       if((int) $data->get('state', 0) == 0)
       {
-        $this->getApplication()->setUserState($element . '.license.state', 0);
-        $this->getApplication()->setUserState($element . '.license.msg-type', 'error');
-        $this->getApplication()->setUserState($element . '.license.msg-text', Text::_($lang_prefix . '_MSG_LICENSE_DISABLED'));
+        $app->setUserState($element . '.license.state', 0);
+        $app->setUserState($element . '.license.msg-type', 'error');
+        $app->setUserState($element . '.license.msg-text', Text::_($lang_prefix . '_MSG_LICENSE_DISABLED'));
       }
       else
       {
-        $this->getApplication()->setUserState($element . '.license.state', -1);
-        $this->getApplication()->setUserState($element . '.license.msg-type', 'error');
-        $this->getApplication()->setUserState($element . '.license.msg-text', Text::_($lang_prefix . '_MSG_LICENSE_UNKNOWN'));
+        $app->setUserState($element . '.license.state', -1);
+        $app->setUserState($element . '.license.msg-type', 'error');
+        $app->setUserState($element . '.license.msg-text', Text::_($lang_prefix . '_MSG_LICENSE_UNKNOWN'));
       }
     }
     elseif((int) $data->get('state', 0) > 1)
     {
       // Plugin stays active, but show message that license has expired
-      $this->getApplication()->setUserState($element . '.license.state', 2);
-      $this->getApplication()->setUserState($element . '.license.msg-type', 'warning');
-      $this->getApplication()->setUserState($element . '.license.msg-text', Text::_($lang_prefix . '_MSG_LICENSE_EXPIRED'));
+      $app->setUserState($element . '.license.state', 2);
+      $app->setUserState($element . '.license.msg-type', 'warning');
+      $app->setUserState($element . '.license.msg-text', Text::_($lang_prefix . '_MSG_LICENSE_EXPIRED'));
     }
     else
     {
-      $this->getApplication()->setUserState($element . '.license.state', 1);
-      $this->getApplication()->setUserState($element . '.license.msg-type', 'success');
-      $this->getApplication()->setUserState($element . '.license.msg-text', Text::_($lang_prefix . '_MSG_LICENSE_ACTIVE'));
+      $app->setUserState($element . '.license.state', 1);
+      $app->setUserState($element . '.license.msg-type', 'success');
+      $app->setUserState($element . '.license.msg-text', Text::_($lang_prefix . '_MSG_LICENSE_ACTIVE'));
     }
   }
 
@@ -1546,6 +1613,16 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    */
   private function requestExtensionData(string $url, bool $force_update = false)
   {
+    $app = $this->getApplication();
+
+    // This feature only applies in the site and administrator applications
+    if( !($app instanceof CMSWebApplicationInterface) ||
+        (!$app->isClient('site') && !$app->isClient('administrator'))
+      )
+    {
+      return false;
+    }
+
     // Only request once a day or if no custom data is available
     $now          = Factory::getDate();
     $last_request = $this->getLastRequest($this->id, 'techspuur', false);
@@ -1578,7 +1655,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         }
         else
         {
-          $this->getApplication()->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML_EXTENSIONS', 'Network unavailable.'), 'error');
+          $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_XML_EXTENSIONS', 'Network unavailable.'), 'error');
 
           return false;
         }
@@ -1629,7 +1706,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
 
     $this->setCustomData($this->id, $proExtensions, false);
-    $this->getApplication()->setUserState('techspuur.request.date', $date);
+    $app->setUserState('techspuur.request.date', $date);
 
     return $proExtensions;
   }
@@ -1639,7 +1716,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    *
    * @param   string  $uri  The URI of the feed to load. Idn uris must be passed already converted to punycode.
    *
-   * @return  SimpleXMLElement
+   * @return  \SimpleXMLElement
    *
    * @since   1.0.0
    * @throws  \InvalidArgumentException

@@ -17,6 +17,7 @@ use Joomla\CMS\Factory;
 use Joomla\CMS\Form\FormField;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Layout\LayoutHelper;
+use Joomla\Event\DispatcherInterface;
 
 class ExtensionsField extends FormField
 {
@@ -53,7 +54,7 @@ class ExtensionsField extends FormField
    */
   protected function getInput()
   {
-    $dispatcher = Factory::getApplication()->getDispatcher();
+    $dispatcher = Factory::getContainer()->get(DispatcherInterface::class);
     $plugin     = new TechSpuur($dispatcher, ['id' => 0]);
     $url        = 'https://updates.spuur.ch/extensions.xml';
 

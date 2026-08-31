@@ -1,12 +1,12 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <extension type="plugin" group="system" method="upgrade">
     <name>plg_system_techspuur</name>
-    <creationDate>2025-23-02</creationDate>
+    <creationDate>2026-30-08</creationDate>
     <copyright>Copyright (C) 2025 Manuel Haeusler. All rights reserved.</copyright>
     <license>GNU General Public License version 3 or later</license>
     <author>Manuel Häusler</author>
     <authorUrl>https://tech.spuur.ch</authorUrl>
-    <version>1.0.3</version>
+    <version>1.1.0-beta1</version>
     <description>PLG_SYSTEM_TECHSPUUR_XML_DESCRIPTION</description>
     <namespace path="src">Elfangor93\Plugin\System\Techspuur</namespace>
 
