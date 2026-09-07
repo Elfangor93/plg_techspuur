@@ -93,7 +93,7 @@
                  label="PLG_SYSTEM_TECHSPUUR_FIELD_LICENSE_FREQUENCY"
                  description="PLG_SYSTEM_TECHSPUUR_FIELD_LICENSE_FREQUENCY_DESC"
                  min="10800"
-                 max="10510000"
+                 max="2592000"
           />
           <field name="offline"
                  type="buttonscript"
@@ -113,4 +113,3 @@
       <server type="extension" priority="1" name="TechSpuur Framework">https://updates.spuur.ch/plg_techspuur.xml</server>
     </updateservers>
 </extension>
-

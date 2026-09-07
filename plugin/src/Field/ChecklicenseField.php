@@ -148,6 +148,12 @@ class ChecklicenseField extends FormField
           $state_txt .= '<br><small>(' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_EXPIRATION_LABEL', $exp_date) . ', ' . Text::sprintf('PLG_SYSTEM_TECHSPUUR_NUMLICENSES_LABEL', $data->num_licenses) . ')</small>';
           break;
 
+        case 3:
+          // License server temporarily unreachable
+          $icon_class = 'icon-warning';
+          $state_txt  = Text::_('PLG_SYSTEM_TECHSPUUR_SERVER_UNREACHABLE');
+          break;
+
         case 0:
           // License disabled / User blocked
           $icon_class = 'icon-unpublish';

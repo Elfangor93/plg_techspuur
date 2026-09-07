@@ -20,6 +20,7 @@ use Joomla\CMS\Filter\InputFilter;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Log\Log;
 use Joomla\CMS\Plugin\CMSPlugin;
+use Joomla\CMS\Session\Session;
 use Joomla\CMS\Uri\Uri;
 use Joomla\Database\ParameterType;
 use Joomla\Event\DispatcherInterface;
@@ -36,8 +37,9 @@ use Joomla\Registry\Registry;
 class TechSpuur extends CMSPlugin implements SubscriberInterface
 {
   private const EXTENSIONS_URL = 'https://updates.spuur.ch/extensions.xml';
-
-  private const LICENSE_PATH = '/index.php?option=com_sesamepayforaccess&view=licensevalidate&format=json';
+  private const LICENSE_PATH   = '/index.php?option=com_sesamepayforaccess&view=licensevalidate&format=json';
+  private const DIAGNOSTIC_LOG = 'diagnostic.log';
+  private const SENSITIVE_LOG  = 'sensitive.log';
 
   /**
    * Refresh interval in seconds.
@@ -47,6 +49,14 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    * @since  1.0.0
    */
   public $refresh_rate = 43200;
+
+  /**
+   * Grace period before an unreachable license server invalidates a license.
+   * 604800 seconds = 7 days
+   *
+   * @var integer
+   */
+  public $grace_period = 604800;
 
   /**
    * Load plugin language files automatically
@@ -95,6 +105,13 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   protected static $extensionsSource = '';
 
   /**
+   * Trusted license-server configuration loaded only from the bundled XML.
+   *
+   * @var array{host: string, server: string, addresses: array<int, string>}|null
+   */
+  protected static $licenseServerConfig = null;
+
+  /**
    * Whether the insecure local-development TLS warning has already been shown.
    *
    * @var bool
@@ -139,8 +156,9 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $params    = json_decode($config['params']);
       $frequency = \intval($params->frequency);
 
-      if($frequency && $frequency > 10800 && $frequency < 10510000)
+      if($frequency && $frequency > 10800 && $frequency < 2592000)
       {
+        // Refresh frequency must be between 3h and 30days
         $this->refresh_rate = $params->frequency;
       }
     }
@@ -179,6 +197,13 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       (!$app->isClient('site') && !$app->isClient('administrator'))
     )
     {
+      return;
+    }
+
+    if($app->isClient('administrator') && $app->getInput()->getCmd('option') === 'plg_techspuur')
+    {
+      $this->handleLogEndpoint();
+
       return;
     }
 
@@ -518,6 +543,158 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   }
 
   /**
+   * Serve or delete fixed-name TechSpuur logs through an administrator-only endpoint.
+   * 
+   * @return  void
+   * 
+   * @since   __DEPLOY_VERSION__
+   */
+  private function handleLogEndpoint(): void
+  {
+    $app    = $this->getApplication();
+    $task   = $app->getInput()->getCmd('task');
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+
+    if(!$app->getIdentity()->authorise('core.admin'))
+    {
+      throw new \RuntimeException(Text::_('JERROR_ALERTNOAUTHOR'), 403);
+    }
+
+    $downloads = [
+      'downloadDiagnosticLog' => self::DIAGNOSTIC_LOG,
+      'downloadSensitiveLog'  => self::SENSITIVE_LOG,
+    ];
+
+    if(isset($downloads[$task]))
+    {
+      if($method !== 'GET' || !Session::checkToken('get'))
+      {
+        throw new \RuntimeException(Text::_('JINVALID_TOKEN'), 403);
+      }
+
+      $file = $this->getProtectedLogDirectory() . DIRECTORY_SEPARATOR . $downloads[$task];
+
+      if(!is_file($file) || is_link($file))
+      {
+        throw new \RuntimeException(Text::_('PLG_SYSTEM_TECHSPUUR_NO_LOGFILE_FOUND'), 404);
+      }
+
+      $app->setHeader('Content-Type', 'text/plain; charset=UTF-8', true);
+      $app->setHeader('Content-Disposition', 'attachment; filename="' . $downloads[$task] . '"', true);
+      $app->setHeader('X-Content-Type-Options', 'nosniff', true);
+      $app->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate', true);
+      $app->sendHeaders();
+      readfile($file);
+      $app->close();
+    }
+
+    if($task === 'deleteLogs')
+    {
+      if($method !== 'POST' || !Session::checkToken('post'))
+      {
+        throw new \RuntimeException(Text::_('JINVALID_TOKEN'), 403);
+      }
+
+      $directory = $this->getProtectedLogDirectory();
+
+      foreach([self::DIAGNOSTIC_LOG, self::SENSITIVE_LOG] as $filename)
+      {
+        $file = $directory . DIRECTORY_SEPARATOR . $filename;
+
+        if(is_file($file) && !is_link($file))
+        {
+          unlink($file);
+        }
+      }
+
+      $app->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_LOGS_DELETED'), 'success');
+      $app->redirect('index.php?option=com_plugins&view=plugin&layout=edit&extension_id=' . $this->id);
+      $app->close();
+    }
+
+    throw new \RuntimeException(Text::_('JERROR_LAYOUT_PAGE_NOT_FOUND'), 404);
+  }
+
+  /**
+   * Create the protected log directory and web-server deny rules when required.
+   * 
+   * @return  string  The log directory
+   * 
+   * @return  void
+   * 
+   * @since   __DEPLOY_VERSION__
+   */
+  private function getProtectedLogDirectory(): string
+  {
+    $directory = rtrim((string) $this->getApplication()->get('tmp_path'), '/\\') . DIRECTORY_SEPARATOR . 'techspuur';
+
+    if(!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory))
+    {
+      throw new \RuntimeException('Unable to create the protected TechSpuur log directory.');
+    }
+
+    $protectionFiles = [
+      '.htaccess' => "Require all denied\nDeny from all\n",
+      'web.config' => "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration><system.webServer><security><authorization><remove users=\"*\" roles=\"\" verbs=\"\"/><add accessType=\"Deny\" users=\"*\"/></authorization></security></system.webServer></configuration>\n",
+      'index.html' => '<!doctype html><title></title>',
+    ];
+
+    foreach($protectionFiles as $filename => $contents)
+    {
+      $path = $directory . DIRECTORY_SEPARATOR . $filename;
+
+      if(!is_file($path) || file_get_contents($path) !== $contents)
+      {
+        if(file_put_contents($path, $contents, LOCK_EX) === false)
+        {
+          throw new \RuntimeException('Unable to protect the TechSpuur log directory.');
+        }
+      }
+    }
+
+    return $directory;
+  }
+
+  /**
+   * Append masked credential diagnostics to the separately protected log.
+   * 
+   * @param   string   $message    Log message
+   * @param   int      $priority   Logging label
+   * 
+   * @return  void
+   * 
+   * @since   __DEPLOY_VERSION__
+   */
+  private function logSensitive(string $message, int $priority = Log::WARNING): void
+  {
+    $labels = [Log::ERROR => 'ERROR', Log::WARNING => 'WARNING', Log::NOTICE => 'NOTICE', Log::INFO => 'INFO'];
+    $line   = Factory::getDate()->toSql() . "\t" . ($labels[$priority] ?? 'INFO') . "\ttechspuur-sensitive\t";
+    $line  .= str_replace(["\r", "\n"], ' ', $message) . PHP_EOL;
+    file_put_contents($this->getProtectedLogDirectory() . DIRECTORY_SEPARATOR . self::SENSITIVE_LOG, $line, FILE_APPEND | LOCK_EX);
+  }
+
+  /**
+   * Append masked credential diagnostics to the separately protected log.
+   * 
+   * @param   string   $value   The value to be masked
+   * 
+   * @return  string   The masked value
+   * 
+   * @since   __DEPLOY_VERSION__
+   */
+  private function maskIdentifier(string $value): string
+  {
+    $length = strlen($value);
+
+    if($length <= 4)
+    {
+      return str_repeat('*', $length);
+    }
+
+    return substr($value, 0, 2) . str_repeat('*', min(8, $length - 4)) . substr($value, -2);
+  }
+
+  /**
    * Try to guess context
    *
    * @param   string   $form   Name of the form
@@ -580,10 +757,11 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     $context = $this->guessContext();
     $ids     = $this->getExtensions();
 
-    // In case license data can not be validated, we deactive the PRO extensions
+    // Preserve the previous license while the server is temporarily unavailable.
     foreach($ids as $id)
     {
-      $this->disable($id);
+      $extension = $this->getExtension($id);
+      $this->markLicenseServerUnavailable($id, $extension->get('element'), $error->getMessage());
     }
 
     // Handle the error depending on application
@@ -1157,7 +1335,10 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       }
     }
 
-    if(!$force_update && ($time_diff < $this->refresh_rate || $offlineuse))
+    $storedData    = $this->getCustomData($id);
+    $retryInterval = (int) $storedData->get('state', -1) === 3 ? min($this->refresh_rate, 900) : $this->refresh_rate;
+
+    if(!$force_update && ($time_diff < $retryInterval || $offlineuse))
     {
       // Validation should happen only once every xx seconds or when its enforced
       return;
@@ -1225,18 +1406,22 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         if($response_body === null)
         {
           Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_JSON_DECODE', json_last_error_msg()), Log::ERROR, 'techspuur');
-          Log::add($response->body, Log::ERROR, 'techspuur');
+          $this->logSensitive('Invalid license response body: ' . substr($response->body, 0, 2000), Log::ERROR);
+          $this->markLicenseServerUnavailable($id, $element, 'Invalid JSON response');
 
           return;
         }
 
         // Decode JSON response body data
-        $license_data_array = json_decode($response_body['data'], true);
+        $license_data_array = isset($response_body['data']) && is_string($response_body['data'])
+          ? json_decode($response_body['data'], true)
+          : null;
 
         if($license_data_array === null)
         {
           Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_JSON_DECODE', json_last_error_msg()), Log::ERROR, 'techspuur');
-          Log::add($response_body['data'], Log::ERROR, 'techspuur');
+          $this->logSensitive('Invalid license data response: ' . substr((string) ($response_body['data'] ?? ''), 0, 2000), Log::ERROR);
+          $this->markLicenseServerUnavailable($id, $element, 'Invalid license data response');
 
           return;
         }
@@ -1251,6 +1436,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
         $license_data->set('num_licenses', $filter->clean($license_data_array['num_licenses']), 'int');
         $license_data->set('expiration_date', $expiration_date->toSql());
         $license_data->set('request_date', Factory::getDate()->toSql());
+        $license_data->set('last_success_at', Factory::getDate()->toSql());
 
         // Get list of extensions
         $this->requestExtensionData(self::EXTENSIONS_URL, true);
@@ -1278,41 +1464,51 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
           $license_state = ['-1' => 'unknown', '0' => 'disabled', '1' => 'active', '2' => 'expired'];
 
           // Prepare log data
-          $logdata_sent     = '[username: ' . $formData['username'] . ', license key: ' . $formData['dlid'] . ', referer: ' . $headers['Referer'] . ']';
+          $logdata_sent     = '[username: ' . $this->maskIdentifier((string) $formData['username']) . ', license key: ' . $this->maskIdentifier((string) $formData['dlid']) . ', referer: ' . $headers['Referer'] . ']';
           $logdata_received = '[license state: ' . $license_state[$license_data->get('state', '-1')] . ', domain: ' . $license_data->get('domain', '-') . ', expiration date: ' . $license_data->get('expiration_date') . ']';
 
           // Logging
           Log::add(Text::_('PLG_SYSTEM_TECHSPUUR_ERROR_LICENSE_MISSING_INFO'), Log::WARNING, 'techspuur');
-          Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_LICENSE_SENT_DATA', $logdata_sent), Log::WARNING, 'techspuur');
-          Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_LICENSE_RECEIVED_DATA', $logdata_received), Log::WARNING, 'techspuur');
+          $this->logSensitive(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_LICENSE_SENT_DATA', $logdata_sent));
+          $this->logSensitive(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_LICENSE_RECEIVED_DATA', $logdata_received));
         }
 
         $app->setUserState($element . '.request.date', $license_data->get('request_date'));
       }
-      elseif($response->code < 500)
+      elseif(in_array($response->code, [401, 403, 422], true))
       {
-        // Access denied
-        Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', 'Response code:' . $response->code . ', Response body:' . $response->body), Log::WARNING, 'techspuur');
+        // The license server explicitly rejected the submitted credentials.
+        Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', 'License credentials rejected with HTTP ' . $response->code), Log::WARNING, 'techspuur');
+        $this->logSensitive('Rejected response body: ' . substr($response->body, 0, 2000), Log::WARNING);
         $app->setUserState($element . '.request.date', $license_data->get('request_date'));
+      }
+      elseif($response->code >= 500 || in_array($response->code, [0, 404, 408, 425, 429], true))
+      {
+        $this->markLicenseServerUnavailable($id, $element, 'HTTP ' . $response->code);
+
+        return;
+      }
+      elseif($response->code >= 400)
+      {
+        // Other 4xx responses indicate a client/protocol error, not a confirmed license decision.
+        Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', 'Unexpected client response code: ' . $response->code), Log::ERROR, 'techspuur');
+        $this->markLicenseServerUnavailable($id, $element, 'HTTP ' . $response->code);
+
+        return;
       }
       else
       {
-        // Server Error
-        // Try to decode json
-        $response_body = json_decode($response->body, true);
+        Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', 'Unexpected response code: ' . $response->code), Log::ERROR, 'techspuur');
+        $this->markLicenseServerUnavailable($id, $element, 'Unexpected HTTP ' . $response->code);
 
-        if($response_body === null)
-        {
-          $response_body = $response->body;
-        }
-
-        Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', 'Response code:' . $response->code . ', Response body:' . $response_body), Log::ERROR, 'techspuur');
+        return;
       }
     }
     catch(\Throwable $e)
     {
       // Application Error
       Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_REQUEST_LICENSE_DATA', $e->getMessage()), Log::ERROR, 'techspuur');
+      $this->markLicenseServerUnavailable($id, $element, $e->getMessage());
 
       return;
     }
@@ -1332,8 +1528,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   private function checkLicenseServer($createLog)
   {
     // Log file
-    $tmp_folder  = $this->getApplication()->get('tmp_path');
-    $logFilePath = $tmp_folder . '/techspuur/requestServer_log_' . time() . '.txt';
+    $logFilePath = $this->getProtectedLogDirectory() . DIRECTORY_SEPARATOR . self::DIAGNOSTIC_LOG;
 
     // Form data to send
     $formData = [
@@ -1548,6 +1743,33 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   }
 
   /**
+   * Store a temporary unreachable state and expire it after the grace period.
+   */
+  private function markLicenseServerUnavailable(int $id, string $element, string $reason): Registry
+  {
+    $data = $this->getCustomData($id);
+    $now  = Factory::getDate();
+
+    if(!$data->get('unreachable_since'))
+    {
+      $data->set('previous_state', (int) $data->get('state', -1));
+      $data->set('unreachable_since', $now->toSql());
+    }
+
+    $unreachableSince = new Date($data->get('unreachable_since', $now->toSql()));
+    $elapsed          = $now->getTimestamp() - $unreachableSince->getTimestamp();
+    $state            = $elapsed >= $this->grace_period ? -1 : 3;
+
+    $data->set('state', $state);
+    $data->set('request_date', $now->toSql());
+    $data->set('validation_error', substr(str_replace(["\r", "\n"], ' ', $reason), 0, 250));
+    $this->setCustomData($id, $data);
+    $this->getApplication()->setUserState($element . '.request.date', $now->toSql());
+
+    return $data;
+  }
+
+  /**
    * Sends to license data from plugin params to endpoint for validation
    *
    * @param   int        $id        Extension id
@@ -1582,6 +1804,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $extension      = self::$data[$id];
       $ressource_name = Text::_(strtoupper($extension->get('name')) . '_SPFA_RESSOURCE_NAME'); // Name of the SPFA ressource
       $this->requestLicenseData($extension->get('extension_id'), $extension->get('params'), $extension->get('element'), $ressource_name);
+      $data = $this->getCustomData($id);
     }
     $lang_prefix = strtoupper($name);
 
@@ -1590,8 +1813,16 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
      *   0: license disabled, user blocked
      *   1: active
      *   2: expired
+     *   3: license server unreachable
      */
-    if((int) $data->get('state', 0) < 1)
+    if((int) $data->get('state', 0) === 3)
+    {
+      // A temporary validation outage does not disable the extension during the grace period.
+      $app->setUserState($element . '.license.state', 3);
+      $app->setUserState($element . '.license.msg-type', 'warning');
+      $app->setUserState($element . '.license.msg-text', Text::_('PLG_SYSTEM_TECHSPUUR_MSG_LICENSE_SERVER_UNREACHABLE'));
+    }
+    elseif((int) $data->get('state', 0) < 1)
     {
       // Turn plugin off, license data not correct
       $this->disable($id);
@@ -1792,7 +2023,8 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   }
 
   /**
-   * Validate the extensions XML and its license-server identity data.
+   * Validate downloaded, cached, or bundled extension catalogue XML.
+   * License-server information in catalogue data is deliberately ignored.
    */
   private function validateExtensionsXml(string $xmlBody): \SimpleXMLElement
   {
@@ -1805,8 +2037,6 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     {
       throw new \RuntimeException('The extensions metadata XML structure is invalid.');
     }
-
-    $this->readLicenseServerConfig($xml);
 
     return $xml;
   }
@@ -1852,18 +2082,38 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   }
 
   /**
-   * Return the currently configured license server, loading metadata if needed.
+   * Return the trusted license-server configuration from the XML shipped with
+   * this plugin. Downloaded and cached catalogue XML is never consulted here.
    *
    * @return array{host: string, server: string, addresses: array<int, string>}
    */
   private function getLicenseServerConfig(): array
   {
-    if(!(self::$extensions instanceof \SimpleXMLElement))
+    if(self::$licenseServerConfig !== null)
     {
-      self::$extensions = $this->loadExtensionsXml();
+      return self::$licenseServerConfig;
     }
 
-    return $this->readLicenseServerConfig(self::$extensions);
+    $file = __DIR__ . DIRECTORY_SEPARATOR . 'extensions.xml';
+
+    if(!is_file($file))
+    {
+      throw new \RuntimeException('The bundled license-server configuration is unavailable.');
+    }
+
+    $previous = libxml_use_internal_errors(true);
+    $xml      = simplexml_load_file($file, \SimpleXMLElement::class, LIBXML_NONET);
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+
+    if(!$xml instanceof \SimpleXMLElement || $xml->getName() !== 'extensionset')
+    {
+      throw new \RuntimeException('The bundled license-server configuration XML is invalid.');
+    }
+
+    self::$licenseServerConfig = $this->readLicenseServerConfig($xml);
+
+    return self::$licenseServerConfig;
   }
 
   /**
@@ -1884,6 +2134,9 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   /**
    * Determine whether TLS certificates must be verified.
    * Verification can only be disabled explicitly while Joomla debug mode is active.
+   * 
+   * @return  bool  True, if TLS certificates must be verified
+   * @since   __DEPLOY_VERSION__
    */
   private function shouldVerifyTls(): bool
   {
@@ -1913,6 +2166,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    * @param resource|null      $verboseFile
    *
    * @return array{body: string, headers: string, info: array<string, mixed>}
+   * @since  __DEPLOY_VERSION__
    */
   private function curlRequest(string $url, ?string $payload = null, array $headers = [], $verboseFile = null): array
   {
@@ -1990,6 +2244,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
    * @param array<string, mixed> $info
    *
    * @return array{host: string, server: string, addresses: array<int, string>, primary_ip: string, response_server: string}
+   * @since  __DEPLOY_VERSION__
    */
   private function verifyLicenseServerIdentity(string $url, array $info, string $headers): array
   {

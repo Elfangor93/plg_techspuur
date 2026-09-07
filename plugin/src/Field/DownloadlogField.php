@@ -1,13 +1,4 @@
 <?php
-/**
- * **************************************************************************
- *    @package    plg_system_techspuur                                     **
- *    @author     Manuel Häusler <tech.spuur@quickline.ch>                 **
- *    @copyright  2026 Manuel Haeusler                                     **
- *    @license    GNU General Public License version 3 or later            **
- * **************************************************************************
- */
-
 namespace Elfangor93\Plugin\System\Techspuur\Field;
 
 \defined('_JEXEC') || die();
@@ -15,79 +6,47 @@ namespace Elfangor93\Plugin\System\Techspuur\Field;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Form\FormField;
 use Joomla\CMS\Language\Text;
+use Joomla\CMS\Session\Session;
 use Joomla\CMS\Uri\Uri;
 use Joomla\Filesystem\Path;
 
 class DownloadlogField extends FormField
 {
-  /**
-   * The form field type.
-   *
-   * @var    string
-   * @since  1.0.0
-   */
   protected $type = 'downloadlog';
-
-  /**
-   * Hide the label when rendering the form field.
-   *
-   * @var    boolean
-   * @since  1.0.0
-   */
   protected $hiddenLabel = false;
-
-  /**
-   * Hide the description when rendering the form field.
-   *
-   * @var    boolean
-   * @since  1.0.0
-   */
   protected $hiddenDescription = false;
 
-  /**
-   * Method to get the field input markup.
-   *
-   * @return  string  The field input markup.
-   *
-   * @since   1.0.0
-   */
   protected function getInput()
   {
-    // Define inline Script
-    $log_folder     = Factory::getApplication()->get('tmp_path') . '/techspuur/';
-    $log_folder_uri = Uri::root() . str_replace(JPATH_ROOT . '/', '', $log_folder);
-    $log_folder     = Path::clean($log_folder);
-    $log_file       = $this->getLatestLogFile($log_folder);
+    $logFolder = Path::clean(Factory::getApplication()->get('tmp_path') . '/techspuur');
+    $baseUrl   = Uri::base() . 'index.php?option=plg_techspuur';
+    $token     = Session::getFormToken();
+    $escape    = static fn($value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $icon      = '<span class="icon icon-download" aria-hidden="true"></span> ';
+    $html      = '<div class="d-flex flex-column gap-2 align-items-start">';
+    $html     .= '<p><strong>' . Text::_('PLG_SYSTEM_TECHSPUUR_LOGFILE_PATH') . ':</strong><br>' . $escape($logFolder) . '</p>';
 
-    $icon = '';
-
-    if($this->element['icon'])
+    foreach([
+      'downloadDiagnosticLog' => ['diagnostic.log', 'PLG_SYSTEM_TECHSPUUR_FIELD_DOWNLOAD_LOG_TXT'],
+      'downloadSensitiveLog'  => ['sensitive.log', 'PLG_SYSTEM_TECHSPUUR_FIELD_DOWNLOAD_SENSITIVE_LOG_TXT'],
+    ] as $task => [$filename, $label])
     {
-      $icon = '<span class="icon icon-' . $this->element['icon'] . '"></span> ';
+      if(is_file($logFolder . DIRECTORY_SEPARATOR . $filename))
+      {
+        $url   = $baseUrl . '&task=' . $task . '&' . $token . '=1';
+        $html .= '<a class="btn btn-secondary" href="' . $escape($url) . '">' . $icon . Text::_($label) . '</a>';
+      }
     }
 
-    $text = '';
-
-    if($this->element['text'])
+    if(!is_file($logFolder . DIRECTORY_SEPARATOR . 'diagnostic.log') && !is_file($logFolder . DIRECTORY_SEPARATOR . 'sensitive.log'))
     {
-      $text = $this->element['text'];
-    }
-
-    // Create output
-    $html  = '<div>';
-    $html .= '<p><strong>' . Text::_('PLG_SYSTEM_TECHSPUUR_LOGFILE_PATH') . ':</strong><br>' . $log_folder . '</p>';
-
-    if($log_file)
-    {
-      // There is a log file to be downloaded
-      $html .= '<a class="btn btn-secondary" href="' . $log_folder_uri . basename($log_file) . '">' . $icon . Text::_($text) . '</a>';
-    }
-    else
-    {
-      // No current logfile found
       $html .= '<p>' . Text::_('PLG_SYSTEM_TECHSPUUR_NO_LOGFILE_FOUND') . '</p>';
     }
-    $html .= '</div>';
+
+    $html .= '<form method="post" action="' . $escape($baseUrl . '&task=deleteLogs') . '">';
+    $html .= '<input type="hidden" name="' . $escape($token) . '" value="1">';
+    $html .= '<button type="submit" class="btn btn-danger"><span class="icon icon-trash" aria-hidden="true"></span> ' . Text::_('PLG_SYSTEM_TECHSPUUR_FIELD_DELETE_LOGS_TXT') . '</button>';
+    $html .= '</form></div>';
 
     return $html;
   }
@@ -95,62 +54,5 @@ class DownloadlogField extends FormField
   protected function getLabel()
   {
     return '';
-  }
-
-  /**
-   * Method to get the latest available log file
-   *
-   * @param   string    $folderPath     Folder path of the log files
-   * @param   int       $maxAge         Max age of the file to be returned (older files are not returned)
-   * @param   string    $prefix         Part of the filename before the unix time string
-   * @param   string    $suffix         Part of the filename after the unix time string
-   *
-   * @return  string  The field input markup.
-   *
-   * @since   1.0.0
-   */
-  protected function getLatestLogFile($folderPath, $maxAge = 600, $prefix = 'requestServer_log_', $suffix = '.txt')
-  {
-    $latestFile      = false;
-    $latestTimestamp = 0;
-    $now             = time();
-
-    // Ensure folder exists
-    if(!is_dir($folderPath))
-    {
-      if(!is_dir(\dirname($folderPath)))
-      {
-        // Parent doesn't exist
-        return false;
-      }
-
-      // Create the folder
-      if(!mkdir($folderPath, 0777, false))
-      {
-        return false;
-      }
-    }
-
-    // Read files in folder
-    $files = scandir($folderPath);
-
-    foreach($files as $file)
-    {
-      // Match files with correct pattern
-      if(preg_match('/^' . preg_quote($prefix, '/') . "(\d+)" . preg_quote($suffix, '/') . '$/', $file, $matches))
-      {
-        $timestamp = (int) $matches[1];
-
-        // Check if timestamp is within the last 10 minutes
-        if(($now - $timestamp) <= $maxAge && $timestamp > $latestTimestamp)
-        {
-          $latestTimestamp = $timestamp;
-          $latestFile      = $file;
-        }
-      }
-    }
-
-    // Return full path or just file name
-    return $latestFile ? $folderPath . DIRECTORY_SEPARATOR . $latestFile : false;
   }
 }

@@ -13,6 +13,17 @@
 use Joomla\CMS\Language\Text;
 
 /** @var object $displayData */
+$escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$safeUrl = static function ($value) use ($escape): string {
+  $url = trim((string) $value);
+
+  if(filter_var($url, FILTER_VALIDATE_URL) === false || strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https')
+  {
+    return '';
+  }
+
+  return $escape($url);
+};
 ?>
 
 <h4><?php echo Text::_('PLG_SYSTEM_TECHSPUUR_EXTENSIONS_TITLE'); ?></h4>
@@ -40,11 +51,12 @@ use Joomla\CMS\Language\Text;
     <?php foreach($displayData->extension as $extension) : ?>
       <tr>
         <td class="d-md-table-cell">
-          <?php echo (string) $extension['name']; ?>
+          <?php echo $escape($extension['name']); ?>
           <div class="small break-word">
-            <?php echo ucfirst((string) $extension['type']); ?>
-            <?php if(isset($extension['infourl']) && !empty($extension['infourl'])) : ?>
-              , <a href="<?php echo (string) $extension['infourl']; ?>" target="_blank"><?php echo Text::_('JVISIT_WEBSITE'); ?></a>
+            <?php echo $escape(ucfirst((string) $extension['type'])); ?>
+            <?php $infoUrl = isset($extension['infourl']) ? $safeUrl($extension['infourl']) : ''; ?>
+            <?php if($infoUrl !== '') : ?>
+              , <a href="<?php echo $infoUrl; ?>" target="_blank" rel="noopener noreferrer"><?php echo Text::_('JVISIT_WEBSITE'); ?></a>
             <?php endif; ?>
           </div>
         </td>
@@ -56,18 +68,19 @@ use Joomla\CMS\Language\Text;
       {
         $license = 'paid';
       }
-      echo $license;
+      echo $escape($license);
       ?>
         </td>
         <td class="d-md-table-cell">
-          <?php echo (string) $extension['version']; ?>
+          <?php echo $escape($extension['version']); ?>
         </td>
         <td class="d-md-table-cell">
-          <?php echo (string) $extension['description']; ?>
+          <?php echo $escape($extension['description']); ?>
         </td>
         <td class="d-md-table-cell small">
-          <?php if(isset($extension['downloadurl']) && !empty($extension['downloadurl'])) : ?>
-            <a href="<?php echo (string) $extension['downloadurl']; ?>" target="_blank">
+          <?php $downloadUrl = isset($extension['downloadurl']) ? $safeUrl($extension['downloadurl']) : ''; ?>
+          <?php if($downloadUrl !== '') : ?>
+            <a href="<?php echo $downloadUrl; ?>" target="_blank" rel="noopener noreferrer">
               <?php echo Text::_('PLG_SYSTEM_TECHSPUUR_DOWNLOAD'); ?>
             </a>
           <?php else : ?>
