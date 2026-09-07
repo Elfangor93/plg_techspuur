@@ -200,16 +200,16 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       return;
     }
 
+    // Load language before handling custom endpoints so endpoint messages are translated.
+    $lang = $app->getLanguage();
+    $lang->load('plg_system_techspuur', JPATH_SITE . '/plugins/system/techspuur');
+
     if($app->isClient('administrator') && $app->getInput()->getCmd('option') === 'plg_techspuur')
     {
       $this->handleLogEndpoint();
 
       return;
     }
-
-    // Load language
-    $lang = Factory::getApplication()->getLanguage();
-    $lang->load('plg_system_techspuur', JPATH_SITE . '/plugins/system/techspuur');
 
     // Update list of extensions
     $ids = $this->getExtensions();
@@ -520,6 +520,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       $data_params    = new Registry($data->params);
       $ressource_name = Text::_(strtoupper($extension->get('name')) . '_SPFA_RESSOURCE_NAME'); // Name of the SPFA ressource
       $this->requestLicenseData($extension->get('extension_id'), $data_params, $extension->get('element'), $ressource_name, true);
+      $app->enqueueMessage(Text::_('PLG_SYSTEM_TECHSPUUR_SUCCESS_LICENSE_REQUEST_FORCED'), 'info');
       $app->setUserState(strtolower($extension->get('name')) . '.license.force_update', false);
     }
 
@@ -764,7 +765,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
     catch(\Throwable $stateError)
     {
-      Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_CUSTOM_DATA', $stateError->getMessage()), Log::ERROR,'techspuur');
+      Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_CUSTOM_DATA', $stateError->getMessage()), Log::ERROR, 'techspuur');
     }
 
     // Handle the error depending on application

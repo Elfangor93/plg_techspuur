@@ -98,7 +98,7 @@ class ButtonscriptField extends FormField
       $html .= $this->getRenderer('joomla.form.field.text')->render($this->collectLayoutData());
     }
 
-    $html .= '<button class="btn btn-primary" onclick="performScript(\'' . $this->element['script'] . '\');">' . $icon . Text::_($text) . '</button>';
+    $html .= '<button type="button" class="btn btn-primary" onclick="performScript(\'' . $this->element['script'] . '\');">' . $icon . Text::_($text) . '</button>';
 
     if($this->element['input'])
     {

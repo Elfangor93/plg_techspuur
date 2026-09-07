@@ -22,7 +22,9 @@ class DownloadlogField extends FormField
     $baseUrl   = Uri::base() . 'index.php?option=plg_techspuur';
     $token     = Session::getFormToken();
     $escape    = static fn($value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $deleteUrl = $baseUrl . '&task=deleteLogs';
     $icon      = '<span class="icon icon-download" aria-hidden="true"></span> ';
+    $hasLogs   = false;
     $html      = '<div class="d-flex flex-column gap-2 align-items-start">';
     $html     .= '<p><strong>' . Text::_('PLG_SYSTEM_TECHSPUUR_LOGFILE_PATH') . ':</strong><br>' . $escape($logFolder) . '</p>';
 
@@ -33,20 +35,37 @@ class DownloadlogField extends FormField
     {
       if(is_file($logFolder . DIRECTORY_SEPARATOR . $filename))
       {
+        $hasLogs = true;
         $url   = $baseUrl . '&task=' . $task . '&' . $token . '=1';
         $html .= '<a class="btn btn-secondary" href="' . $escape($url) . '">' . $icon . Text::_($label) . '</a>';
       }
     }
 
-    if(!is_file($logFolder . DIRECTORY_SEPARATOR . 'diagnostic.log') && !is_file($logFolder . DIRECTORY_SEPARATOR . 'sensitive.log'))
+    if(!$hasLogs)
     {
       $html .= '<p>' . Text::_('PLG_SYSTEM_TECHSPUUR_NO_LOGFILE_FOUND') . '</p>';
     }
 
-    $html .= '<form method="post" action="' . $escape($baseUrl . '&task=deleteLogs') . '">';
-    $html .= '<input type="hidden" name="' . $escape($token) . '" value="1">';
-    $html .= '<button type="submit" class="btn btn-danger"><span class="icon icon-trash" aria-hidden="true"></span> ' . Text::_('PLG_SYSTEM_TECHSPUUR_FIELD_DELETE_LOGS_TXT') . '</button>';
-    $html .= '</form></div>';
+    if($hasLogs)
+    {
+      $js  = 'function deleteTechspuurLogs() {';
+      $js .=   'const form = document.createElement("form");';
+      $js .=   'form.method = "post";';
+      $js .=   'form.action = ' . json_encode($deleteUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';';
+      $js .=   'const token = document.createElement("input");';
+      $js .=   'token.type = "hidden";';
+      $js .=   'token.name = ' . json_encode($token, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';';
+      $js .=   'token.value = "1";';
+      $js .=   'form.appendChild(token);';
+      $js .=   'document.body.appendChild(form);';
+      $js .=   'form.submit();';
+      $js .= '}';
+      Factory::getApplication()->getDocument()->getWebAssetManager()->addInlineScript($js, ['name' => 'techspuur.delete-logs']);
+
+      $html .= '<button type="button" class="btn btn-danger" onclick="deleteTechspuurLogs();"><span class="icon icon-trash" aria-hidden="true"></span> ' . Text::_('PLG_SYSTEM_TECHSPUUR_FIELD_DELETE_LOGS_TXT') . '</button>';
+    }
+
+    $html .= '</div>';
 
     return $html;
   }

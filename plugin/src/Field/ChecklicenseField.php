@@ -84,7 +84,7 @@ class ChecklicenseField extends FormField
     $wa = $app->getDocument()->getWebAssetManager();
     $wa->addInlineScript($js);
 
-    $html = '<button class="btn btn-primary" onclick="checkLicense();"><span class="icon icon-tag"></span> ' . Text::_($this->element['label']) . '</button>';
+    $html = '<button type="button" class="btn btn-primary" onclick="checkLicense();"><span class="icon icon-tag"></span> ' . Text::_($this->element['label']) . '</button>';
 
     return $html;
   }
