@@ -228,7 +228,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       catch(\Throwable $th)
       {
         // Checking license not possible, probably network problems
-        $this->licenceCheckError($th);
+        $this->licenceCheckError($th, (int) $id, (string) $ext->get('element'));
       }
 
       // Compose list of dependent components
@@ -528,10 +528,10 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       // Check the license of the extension
       $this->checkLicenseData($extension->get('extension_id'), $extension->get('element'), $extension->get('name'));
     }
-    catch(\Exception $e)
+    catch(\Throwable $e)
     {
       // Checking license not possible, probably network problems
-      $this->licenceCheckError($e);
+      $this->licenceCheckError($e, (int) $extension->get('extension_id'), (string) $extension->get('element'));
     }
 
     // Display the license message
@@ -747,21 +747,24 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
   /**
    * Handle an error during license check
    *
-   * @param   string   $error   The error
+   * @param   \Throwable  $error    The error
+   * @param   int         $id       Failing extension ID
+   * @param   string      $element  Failing extension element
    *
    * @since   1.0.3
    */
-  private function licenceCheckError($error): void
+  private function licenceCheckError(\Throwable $error, int $id, string $element): void
   {
-    $app     = $this->getApplication();
-    $context = $this->guessContext();
-    $ids     = $this->getExtensions();
+    $app = $this->getApplication();
 
-    // Preserve the previous license while the server is temporarily unavailable.
-    foreach($ids as $id)
+    // Isolate the failure to the extension whose check failed.
+    try
     {
-      $extension = $this->getExtension($id);
-      $this->markLicenseServerUnavailable($id, $extension->get('element'), $error->getMessage());
+      $this->markLicenseServerUnavailable($id, $element, $error->getMessage());
+    }
+    catch(\Throwable $stateError)
+    {
+      Log::add(Text::sprintf('PLG_SYSTEM_TECHSPUUR_ERROR_CUSTOM_DATA', $stateError->getMessage()), Log::ERROR,'techspuur');
     }
 
     // Handle the error depending on application
@@ -1970,7 +1973,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     try
     {
       $downloaded = $this->downloadHttps(self::EXTENSIONS_URL);
-      $xml        = $this->validateExtensionsXml($downloaded);
+      $xml        = $this->mergeWithBundledExtensionsXml($this->validateExtensionsXml($downloaded));
 
       if(!(is_dir($cacheDir) || mkdir($cacheDir, 0755, true))
         || file_put_contents($cacheXml, $downloaded, LOCK_EX) === false)
@@ -1998,7 +2001,7 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
           throw new \RuntimeException('Unable to read the cached extensions metadata.');
         }
 
-        $xml = $this->validateExtensionsXml($cached);
+        $xml = $this->mergeWithBundledExtensionsXml($this->validateExtensionsXml($cached));
         self::$extensionsSource = 'cache';
 
         return $xml;
@@ -2039,6 +2042,78 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
     }
 
     return $xml;
+  }
+
+  /**
+   * Merge catalogue data with the bundled catalogue taking precedence for
+   * matching extension identities. Server-only entries remain available.
+   */
+  private function mergeWithBundledExtensionsXml(\SimpleXMLElement $catalogue): \SimpleXMLElement
+  {
+    $bundledFile = __DIR__ . DIRECTORY_SEPARATOR . 'extensions.xml';
+    $bundledBody = file_get_contents($bundledFile);
+
+    if($bundledBody === false)
+    {
+      throw new \RuntimeException('The bundled extensions metadata is unavailable.');
+    }
+
+    $bundled       = $this->validateExtensionsXml($bundledBody);
+    $resultDocument = new \DOMDocument('1.0', 'UTF-8');
+
+    if(!$resultDocument->loadXML($catalogue->asXML(), LIBXML_NONET))
+    {
+      throw new \RuntimeException('Unable to prepare the merged extensions metadata.');
+    }
+
+    $resultRoot = $resultDocument->documentElement;
+    $remote     = [];
+
+    foreach(iterator_to_array($resultRoot->childNodes) as $node)
+    {
+      if($node instanceof \DOMElement && $node->tagName === 'extension')
+      {
+        $remote[] = $node->cloneNode(true);
+        $resultRoot->removeChild($node);
+      }
+    }
+
+    $identity = static fn(\DOMElement $node): string => implode('|', [
+      strtolower(trim($node->getAttribute('type'))),
+      strtolower(trim($node->getAttribute('element'))),
+      strtolower(trim($node->getAttribute('folder'))),
+    ]);
+    $known = [];
+
+    foreach(dom_import_simplexml($bundled)->childNodes as $node)
+    {
+      if($node instanceof \DOMElement && $node->tagName === 'extension')
+      {
+        $key         = $identity($node);
+        $known[$key] = true;
+        $resultRoot->appendChild($resultDocument->importNode($node, true));
+      }
+    }
+
+    foreach($remote as $node)
+    {
+      $key = $identity($node);
+
+      if(!isset($known[$key]))
+      {
+        $known[$key] = true;
+        $resultRoot->appendChild($resultDocument->importNode($node, true));
+      }
+    }
+
+    $merged = simplexml_import_dom($resultDocument);
+
+    if(!$merged instanceof \SimpleXMLElement)
+    {
+      throw new \RuntimeException('Unable to create the merged extensions metadata.');
+    }
+
+    return $merged;
   }
 
   /**
@@ -2345,6 +2420,8 @@ class TechSpuur extends CMSPlugin implements SubscriberInterface
       throw new \RuntimeException('Error reading feed.', $e->getCode(), $e);
     }
 
-    return new \SimpleXMLElement($xmlString);
+    $xml = new \SimpleXMLElement($xmlString);
+
+    return $uri === self::EXTENSIONS_URL ? $this->mergeWithBundledExtensionsXml($this->validateExtensionsXml($xmlString)) : $xml;
   }
 }
