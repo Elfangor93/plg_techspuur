@@ -1,12 +1,12 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <extension type="plugin" group="system" method="upgrade">
     <name>plg_system_techspuur</name>
-    <creationDate>2025-23-02</creationDate>
-    <copyright>Copyright (C) 2025 Manuel Haeusler. All rights reserved.</copyright>
+    <creationDate>2026-09-11</creationDate>
+    <copyright>Copyright (C) 2026 Manuel Haeusler. All rights reserved.</copyright>
     <license>GNU General Public License version 3 or later</license>
     <author>Manuel Häusler</author>
     <authorUrl>https://tech.spuur.ch</authorUrl>
-    <version>1.0.3</version>
+    <version>1.1.0</version>
     <description>PLG_SYSTEM_TECHSPUUR_XML_DESCRIPTION</description>
     <namespace path="src">Elfangor93\Plugin\System\Techspuur</namespace>
 
@@ -43,7 +43,7 @@
               <option value="1">JYES</option>
           </field>
           <field name="checkserver"
-					       type="buttonscript"
+                 type="buttonscript"
                  label="PLG_SYSTEM_TECHSPUUR_FIELD_CHECK_SERVER"
                  description="PLG_SYSTEM_TECHSPUUR_FIELD_CHECK_SERVER_DESC"
                  text="PLG_SYSTEM_TECHSPUUR_FIELD_CHECK_SERVER_TXT"
@@ -51,7 +51,7 @@
                  icon="out-2"
           />
           <field name="downloadlog"
-					       type="downloadlog"
+                 type="downloadlog"
                  label="PLG_SYSTEM_TECHSPUUR_FIELD_DOWNLOAD_LOG"
                  text="PLG_SYSTEM_TECHSPUUR_FIELD_DOWNLOAD_LOG_TXT"
                  icon="download"
@@ -66,7 +66,7 @@
                  description="PLG_SYSTEM_TECHSPUUR_FIELD_NOTE_EXTENSIONS_DESC"
           />
           <field name="refreshlist"
-					       type="buttonscript"
+		   type="buttonscript"
                  label="PLG_SYSTEM_TECHSPUUR_FIELD_REFRESH_LIST"
                  description="PLG_SYSTEM_TECHSPUUR_FIELD_REFRESH_LIST_DESC"
                  text="PLG_SYSTEM_TECHSPUUR_FIELD_REFRESH_LIST_TXT"
@@ -78,7 +78,7 @@
                  hr="true"
           />
           <field name="extensions"
-					       type="extensions"
+		   type="extensions"
           />
         </fieldset>
         <fieldset name="advanced">
@@ -93,7 +93,7 @@
                  label="PLG_SYSTEM_TECHSPUUR_FIELD_LICENSE_FREQUENCY"
                  description="PLG_SYSTEM_TECHSPUUR_FIELD_LICENSE_FREQUENCY_DESC"
                  min="10800"
-                 max="10510000"
+                 max="2592000"
           />
           <field name="offline"
                  type="buttonscript"
@@ -113,4 +113,3 @@
       <server type="extension" priority="1" name="TechSpuur Framework">https://updates.spuur.ch/plg_techspuur.xml</server>
     </updateservers>
 </extension>
-
